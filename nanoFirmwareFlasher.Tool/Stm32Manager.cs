@@ -66,6 +66,13 @@ namespace nanoFramework.Tools.FirmwareFlasher
         /// <inheritdoc />
         public async Task<ExitCodes> ProcessAsync()
         {
+            // MCUboot update path: delegate to McubootManager; existing DFU/JTAG paths unchanged
+            if (_options.McubootTarget)
+            {
+                var mcubootManager = new McubootManager(_options, _verbosityLevel);
+                return await mcubootManager.ProcessAsync();
+            }
+
             if (_options.IdentifyFirmware)
             {
                 OutputWriter.ForegroundColor = ConsoleColor.Red;

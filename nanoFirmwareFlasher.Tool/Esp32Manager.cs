@@ -161,6 +161,29 @@ namespace nanoFramework.Tools.FirmwareFlasher
                 return ExitCodes.OK;
             }
 
+            // MCUboot update path
+            if (_options.McubootTarget)
+            {
+                if (!esp32Device.HasMcuboot)
+                {
+                    // First-time provisioning: flash MCUboot package via esptool
+                    return await Esp32Operations.FlashMcubootInitialPackageAsync(
+                        espTool,
+                        esp32Device,
+                        _options.TargetName,
+                        _options.FwVersion,
+                        _options.Preview,
+                        _options.FromFwArchive ? _options.FwArchivePath : null,
+                        _verbosityLevel);
+                }
+                else
+                {
+                    // Device already running MCUboot: use mcumgr upload path
+                    var mcubootManager = new McubootManager(_options, _verbosityLevel);
+                    return await mcubootManager.ProcessAsync();
+                }
+            }
+
             bool updateAndDeploy = false;
 
             // update operation requested?

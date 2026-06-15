@@ -18,6 +18,7 @@ using CommandLine.Text;
 using Microsoft.Extensions.Configuration;
 using nanoFramework.Tools.FirmwareFlasher.Extensions;
 using nanoFramework.Tools.FirmwareFlasher.FileDeployment;
+using nanoFramework.Tools.FirmwareFlasher.Mcuboot;
 using nanoFramework.Tools.FirmwareFlasher.NetworkDeployment;
 
 namespace nanoFramework.Tools.FirmwareFlasher
@@ -261,6 +262,54 @@ namespace nanoFramework.Tools.FirmwareFlasher
                 return;
             }
 
+            // MCUboot key generation (early exit - no device needed)
+            if (!string.IsNullOrEmpty(o.KeygenOutputPath))
+            {
+                if (string.IsNullOrEmpty(o.SigningKeyPath))
+                {
+                    _exitCode = ExitCodes.E9000;
+                    _extraMessage = "--sign-key must specify the output path when using --keygen.";
+                    return;
+                }
+
+                try
+                {
+                    var imgMgr = new McubootImageManager(o.KeygenOutputPath, slotSize: 0);
+                    _exitCode = imgMgr.GenerateSigningKey(o.KeygenOutputPath);
+                }
+                catch (Exception ex)
+                {
+                    _exitCode = ExitCodes.E10004;
+                    _extraMessage = ex.Message;
+                }
+
+                return;
+            }
+
+            // MCUboot public key extraction (early exit - no device needed)
+            if (!string.IsNullOrEmpty(o.GetPubOutputPath))
+            {
+                if (string.IsNullOrEmpty(o.SigningKeyPath))
+                {
+                    _exitCode = ExitCodes.E9000;
+                    _extraMessage = "--sign-key is required when using --getpub.";
+                    return;
+                }
+
+                try
+                {
+                    var imgMgr = new McubootImageManager(o.SigningKeyPath, slotSize: 0);
+                    _exitCode = imgMgr.ExtractPublicKey(o.SigningKeyPath, o.GetPubOutputPath);
+                }
+                catch (Exception ex)
+                {
+                    _exitCode = ExitCodes.E10004;
+                    _extraMessage = ex.Message;
+                }
+
+                return;
+            }
+
             if (o.ListComPorts)
             {
                 var ports = SerialPort.GetPortNames();
@@ -284,6 +333,47 @@ namespace nanoFramework.Tools.FirmwareFlasher
                 OutputWriter.ForegroundColor = ConsoleColor.White;
                 return;
             }
+
+            #region MCUboot options
+
+            if(o.McubootTarget)
+            {
+                var manager = new McubootManager(o, _verbosityLevel);
+
+                try
+                {
+                    _exitCode = await manager.ProcessAsync();
+                }
+                catch (McubootImageException ex)
+                {
+                    _exitCode = ExitCodes.E10002;
+                    _extraMessage = ex.Message;
+                }
+                catch (McumgrProtocolException ex)
+                {
+                    _exitCode = ExitCodes.E10010;
+                    _extraMessage = ex.Message;
+                }
+                catch (McumgrTimeoutException ex)
+                {
+                    _exitCode = ExitCodes.E10007;
+                    _extraMessage = ex.Message;
+                }
+                catch (NoOperationPerformedException)
+                {
+                    DisplayNoOperationMessage();
+                }
+                catch (Exception ex)
+                {
+                    _exitCode = ExitCodes.E10005;
+                    _extraMessage = ex.Message;
+                }
+
+                // done here, this command has no further processing
+                return;
+            }
+
+            #endregion
 
             #region list targets
 
@@ -795,6 +885,46 @@ namespace nanoFramework.Tools.FirmwareFlasher
                 catch (Exception ex)
                 {
                     _exitCode = ExitCodes.E3000;
+                    _extraMessage = ex.Message;
+                }
+
+                operationPerformed = true;
+            }
+
+            #endregion
+
+            #region Standalone MCUboot / SMP options (no explicit platform)
+
+            if (!operationPerformed && (o.McubootTarget || o.ListMcuImages || o.ConfirmImage || o.TestImage || o.EraseImage))
+            {
+                var manager = new McubootManager(o, _verbosityLevel);
+
+                try
+                {
+                    _exitCode = await manager.ProcessAsync();
+                }
+                catch (McubootImageException ex)
+                {
+                    _exitCode = ExitCodes.E10002;
+                    _extraMessage = ex.Message;
+                }
+                catch (McumgrProtocolException ex)
+                {
+                    _exitCode = ExitCodes.E10010;
+                    _extraMessage = ex.Message;
+                }
+                catch (McumgrTimeoutException ex)
+                {
+                    _exitCode = ExitCodes.E10007;
+                    _extraMessage = ex.Message;
+                }
+                catch (NoOperationPerformedException)
+                {
+                    DisplayNoOperationMessage();
+                }
+                catch (Exception ex)
+                {
+                    _exitCode = ExitCodes.E10005;
                     _extraMessage = ex.Message;
                 }
 

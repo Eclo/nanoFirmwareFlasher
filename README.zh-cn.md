@@ -89,6 +89,7 @@ nanoff --help
 - [TI CC13x2](#ti-cc13x2-使用示例)
 - [Silabs Giant Gecko](#silabs-giant-gecko-使用示例)
 - [Raspberry Pi Pico](#raspberry-pi-pico-使用示例)
+- [MCUboot / SMP 固件更新](#mcuboot-使用示例)
 - [普通连接使用示例](#普通连接使用示例)
 - [常用选项](#常用选项)
 
@@ -348,6 +349,142 @@ nanoff --platform rpi_pico --devicedetails
 ```console
 nanoff --listtargets --platform rpi_pico
 ```
+
+## MCUboot 使用示例
+
+[MCUboot](https://docs.mcuboot.com/) 是一个开源安全 bootloader，提供带有镜像签名、回滚保护和双镜像槽（主槽 + 次槽）的固件更新功能。当 .NET nanoFramework 目标设备运行 MCUboot 时，固件更新通过 **SMP（简单管理协议）** 串行传输进行，而不是使用平台专用的烧录协议。
+
+`--mcuboot` 标志将 nanoff 切换到 MCUboot 模式。
+
+### imgtool 要求
+
+签名镜像需要 `imgtool`（MCUboot Python 包的一部分）。通过 pip 安装：
+
+```console
+pip install imgtool
+```
+
+`imgtool` 必须在 PATH 中可用，或者可以通过 `python -m imgtool` 调用。
+
+### 密钥管理
+
+#### 生成签名密钥
+
+```console
+nanoff --keygen my-signing-key.pem
+```
+
+#### 将公钥提取为 C 源文件
+
+```console
+nanoff --getpub root-pub-key.c --sign-key my-signing-key.pem
+```
+
+将生成的 `root-pub-key.c` 包含在您的 MCUboot bootloader 构建中。
+
+### 首次烧录
+
+首次为 ESP32 设备烧录 MCUboot 时，bootloader、分区表和已签名的 nanoCLR 镜像通过标准 ESP32 串行 bootloader 烧录。指定 `--mcuboot` 时自动完成：
+
+```console
+nanoff --mcuboot --update --target ESP32_GENERIC --serialport COM31 --sign-key my-signing-key.pem
+```
+
+### 通过 SMP 进行现场固件更新
+
+设备运行 MCUboot 后，后续固件更新使用 SMP 串行传输。
+
+nanoFramework MCUboot 目标设备使用**双镜像布局**：
+
+| MCUboot 镜像 | 内容 | 上传选项 |
+| --- | --- | --- |
+| **Image 0** | nanoCLR 固件 | `--clrfile <路径>` |
+| **Image 1** | 托管部署程序集 | `--image <路径>` |
+
+两个镜像可独立更新。在同一命令中只能指定 `--clrfile` 或 `--image` 中的一个，不能同时使用。
+
+#### 通过 SMP 更新 ESP32 目标的 CLR 固件
+
+```console
+nanoff --mcuboot --update --target ESP32_GENERIC --serialport COM31 --sign-key my-signing-key.pem
+```
+
+#### 上传预签名 CLR 镜像
+
+```console
+nanoff --mcuboot --serialport COM31 --clrfile "C:\fw\nanoCLR-signed.bin"
+```
+
+#### 上传部署镜像
+
+```console
+nanoff --mcuboot --serialport COM31 --image "C:\fw\deployment-signed.bin"
+```
+
+#### 上传并永久确认
+
+默认情况下，上传的镜像被标记为**待定**（测试启动）：设备启动一次后，除非新固件自行确认，否则回滚到之前的镜像。添加 `--mcuboot-confirm` 立即永久确认：
+
+```console
+nanoff --mcuboot --serialport COM31 --clrfile "C:\fw\nanoCLR-signed.bin" --mcuboot-confirm
+```
+
+```console
+nanoff --mcuboot --serialport COM31 --image "C:\fw\deployment-signed.bin" --mcuboot-confirm
+```
+
+#### 通过 SMP 更新 STM32 目标
+
+```console
+nanoff --mcuboot --update --target ORGPAL_PALTHREE --serialport COM3 --sign-key my-signing-key.pem
+```
+
+### 槽管理
+
+#### 列出两个槽中的镜像
+
+```console
+nanoff --mcuboot --list-images --serialport COM31
+```
+
+#### 确认待定镜像（使其永久）
+
+```console
+nanoff --mcuboot --confirm-image --serialport COM31
+nanoff --mcuboot --confirm-image --serialport COM31 --image-hash ef567890...
+```
+
+#### 标记镜像为测试启动
+
+```console
+nanoff --mcuboot --test-image --serialport COM31 --image-hash ef567890...
+```
+
+#### 擦除次槽
+
+```console
+nanoff --mcuboot --erase-image --serialport COM31
+```
+
+### MCUboot / SMP 选项参考
+
+| 选项 | 默认值 | 描述 |
+| --- | --- | --- |
+| `--mcuboot` | false | 目标设备运行 MCUboot，通过 SMP 传输更新固件。 |
+| `--clrfile <路径>` | — | CLR 固件镜像路径。使用 `--mcuboot` 时，通过 SMP 作为 MCUboot Image 0（CLR 槽）上传。 |
+| `--image <路径>` | — | 部署程序集镜像路径。使用 `--mcuboot` 时，通过 SMP 作为 MCUboot Image 1（部署槽）上传。 |
+| `--sign-key <路径>` | — | PEM 签名密钥路径。上传前使用 `imgtool` 签名镜像。 |
+| `--mcuboot-confirm` | false | 上传后永久确认镜像。不指定此标志则为测试启动。 |
+| `--mcuboot-slot-size <字节>` | `0x100000` | 镜像槽大小（字节）。需与所签名镜像的槽大小匹配。 |
+| `--mcuboot-header-size <字节>` | `0x200` | MCUboot 镜像头大小（字节）。 |
+| `--mcuboot-write-align <字节>` | `4` | Flash 写入对齐（字节）。 |
+| `--keygen <路径>` | — | 生成新的 ECDSA P-256 签名密钥并写入路径。生成后退出。 |
+| `--getpub <路径>` | — | 从 `--sign-key` 提取公钥为 C 源文件。需要 `--sign-key`。提取后退出。 |
+| `--list-images` | false | 通过 SMP 列出 MCUboot 主槽和次槽中的镜像。需要 `--serialport`。 |
+| `--confirm-image` | false | 通过 SMP 确认待定镜像（使其永久）。需要 `--serialport`。 |
+| `--test-image` | false | 通过 SMP 将待定镜像标记为测试启动。需要 `--serialport`。 |
+| `--erase-image` | false | 通过 SMP 擦除 MCUboot 次槽。需要 `--serialport`。 |
+| `--image-hash <十六进制>` | — | 用于 `--confirm-image` 或 `--test-image` 的十六进制镜像哈希。 |
 
 ## 普通连接使用示例
 

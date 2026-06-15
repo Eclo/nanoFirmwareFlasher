@@ -68,6 +68,14 @@ namespace nanoFramework.Tools.FirmwareFlasher
         public int PsRamSize { get; }
 
         /// <summary>
+        /// True if the device is running under MCUboot and can be updated via SMP.
+        /// </summary>
+        /// <remarks>
+        /// Initially always false. Will be populated via Wire Protocol ping detection once that detection is implemented.
+        /// </remarks>
+        public bool HasMcuboot { get; internal set; }
+
+        /// <summary>
         /// Constructor.
         /// </summary>
         /// <param name="chipType">The type of chip.</param>

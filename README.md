@@ -97,6 +97,7 @@ List of usage examples per platform and common options:
 - [TI CC13x2](#ti-cc13x2-usage-examples)
 - [Silabs Giant Gecko](#silabs-giant-gecko-usage-examples)
 - [Raspberry Pi Pico](#raspberry-pi-pico-usage-examples)
+- [MCUboot / SMP updates](#mcuboot-usage-examples)
 - [Plain connection usage examples](#plain-connection-usage-examples)
 - [Common options](#common-options)
 
@@ -356,6 +357,197 @@ To list all available firmware targets for the Raspberry Pi Pico platform.
 ```console
 nanoff --listtargets --platform rpi_pico
 ```
+
+## MCUboot usage examples
+
+[MCUboot](https://docs.mcuboot.com/) is an open-source secure bootloader that provides firmware update capabilities with image signing, rollback protection, and two image slots (primary + secondary). When a .NET nanoFramework target is running MCUboot, firmware updates are performed via the **SMP (Simple Management Protocol)** serial transport instead of the platform-specific flash protocol.
+
+The `--mcuboot` flag switches nanoff into MCUboot mode for all operations.
+
+### imgtool requirement
+
+Signing images requires `imgtool`, which is part of the MCUboot Python package. Install it with pip:
+
+```console
+pip install imgtool
+```
+
+`imgtool` must be available on your PATH or invocable as `python -m imgtool`. nanoff searches both automatically.
+
+### Key management
+
+Before signing images you need an ECDSA P-256 signing key pair. The public key must be compiled into the MCUboot bootloader; the private key is kept secure on the host.
+
+#### Generate a signing key
+
+```console
+nanoff --keygen my-signing-key.pem
+```
+
+#### Extract the public key as a C source file
+
+```console
+nanoff --getpub root-pub-key.c --sign-key my-signing-key.pem
+```
+
+Include the generated `root-pub-key.c` in your MCUboot bootloader build.
+
+### First-time provisioning
+
+The first time you provision an ESP32 device with MCUboot, the bootloader, partition table, and signed nanoCLR image are all flashed via the standard ESP32 serial bootloader. This happens automatically when `--mcuboot` is specified and the device does not yet have MCUboot running:
+
+```console
+nanoff --mcuboot --update --target ESP32_GENERIC --serialport COM31 --sign-key my-signing-key.pem
+```
+
+nanoff downloads the MCUboot firmware package, signs the nanoCLR image, and flashes everything in one step.
+
+### In-field firmware update via SMP
+
+Once the device is running MCUboot, subsequent firmware updates use the SMP serial transport. The device must be in MCUboot recovery mode (bootloader serial SMP enabled).
+
+nanoFramework MCUboot targets use a **two-image layout**:
+
+| MCUboot image | Content | Upload option |
+| --- | --- | --- |
+| **Image 0** | nanoCLR firmware binary | `--clrfile <path>` |
+| **Image 1** | Managed deployment assemblies | `--image <path>` |
+
+Both images are updated independently. Specify `--clrfile` to update the CLR firmware or `--image` to update the deployment assemblies — not both in the same command.
+
+#### Update CLR firmware on an ESP32 target via SMP
+
+```console
+nanoff --mcuboot --update --target ESP32_GENERIC --serialport COM31 --sign-key my-signing-key.pem
+```
+
+#### Upload a pre-signed CLR image
+
+If you already have a signed CLR image, omit `--sign-key`:
+
+```console
+nanoff --mcuboot --serialport COM31 --clrfile "C:\fw\nanoCLR-signed.bin"
+```
+
+#### Upload a deployment image
+
+To upload a signed managed deployment image (MCUboot Image 1):
+
+```console
+nanoff --mcuboot --serialport COM31 --image "C:\fw\deployment-signed.bin"
+```
+
+#### Upload with permanent confirmation
+
+By default the uploaded image is marked as **pending** (test boot): the device boots it once and reverts to the previous image unless the new firmware explicitly self-confirms. Add `--mcuboot-confirm` to mark the image as permanently confirmed immediately after upload:
+
+```console
+nanoff --mcuboot --serialport COM31 --clrfile "C:\fw\nanoCLR-signed.bin" --mcuboot-confirm
+```
+
+```console
+nanoff --mcuboot --serialport COM31 --image "C:\fw\deployment-signed.bin" --mcuboot-confirm
+```
+
+#### Update a STM32 target via SMP
+
+```console
+nanoff --mcuboot --update --target ORGPAL_PALTHREE --serialport COM3 --sign-key my-signing-key.pem
+```
+
+### Signing options
+
+When `--sign-key` is provided, nanoff invokes `imgtool sign` with these parameters. Override the defaults when your MCUboot partition layout differs from the standard nanoFramework configuration:
+
+| Option | Default | Description |
+| --- | --- | --- |
+| `--mcuboot-slot-size` | `0x100000` (1 MB) | Image slot size in bytes. Must match the slot size in the MCUboot partition table for the image being signed. |
+| `--mcuboot-header-size` | `0x200` (512 B) | MCUboot image header size. Must match the MCUboot build configuration. |
+| `--mcuboot-write-align` | `4` | Flash write alignment in bytes. Typically 4 for most MCU flash. |
+
+Example signing a CLR image with a custom slot size:
+
+```console
+nanoff --mcuboot --serialport COM31 --clrfile nanoCLR.bin --sign-key key.pem --mcuboot-slot-size 0xE8000
+```
+
+Example signing a deployment image:
+
+```console
+nanoff --mcuboot --serialport COM31 --image deployment.bin --sign-key key.pem --mcuboot-slot-size 0x100000
+```
+
+### Slot management
+
+#### List images in both slots
+
+```console
+nanoff --mcuboot --list-images --serialport COM31
+```
+
+Example output:
+
+```text
+Image 0 Slot 0  version=1.2.3.4  hash=abcd1234...  [active, confirmed, bootable]
+Image 0 Slot 1  version=1.3.0.0  hash=ef567890...  [pending, bootable]
+```
+
+#### Confirm a pending image (make it permanent)
+
+```console
+nanoff --mcuboot --confirm-image --serialport COM31
+```
+
+To target a specific image by hash (from `--list-images` output):
+
+```console
+nanoff --mcuboot --confirm-image --serialport COM31 --image-hash ef567890...
+```
+
+#### Mark an image for test boot
+
+```console
+nanoff --mcuboot --test-image --serialport COM31 --image-hash ef567890...
+```
+
+#### Erase the secondary slot
+
+```console
+nanoff --mcuboot --erase-image --serialport COM31
+```
+
+### Serial port
+
+All MCUboot SMP operations use `--serialport` for the SMP transport. The SMP baud rate is fixed at **115200 baud** — the standard MCUboot serial SMP default. Note this is different from the ESP32 flash baud rate (default 1,500,000).
+
+### Update path decision matrix
+
+| Device state | `--mcuboot` specified | Update path used |
+| --- | --- | --- |
+| ESP32, no MCUboot | Yes | First-time provisioning via serial bootloader |
+| ESP32, MCUboot running | Yes | SMP serial transport via mcumgr protocol |
+| STM32 | Yes | SMP serial transport via mcumgr protocol |
+| Any target | No | Legacy flash protocol (DFU, JTAG, serial) |
+
+### MCUboot / SMP options reference
+
+| Option | Default | Description |
+| --- | --- | --- |
+| `--mcuboot` | false | Target device is running MCUboot. Routes firmware update to SMP transport. |
+| `--clrfile <path>` | — | Path to CLR firmware image. With `--mcuboot`, uploads as MCUboot Image 0 (CLR slot) via SMP. |
+| `--image <path>` | — | Path to deployment assemblies image. With `--mcuboot`, uploads as MCUboot Image 1 (deployment slot) via SMP. |
+| `--sign-key <path>` | — | Path to PEM signing key. Image is signed with `imgtool` before uploading. |
+| `--mcuboot-confirm` | false | Permanently confirm the uploaded image. Without this flag the image is a test boot. |
+| `--mcuboot-slot-size <bytes>` | `0x100000` | Image slot size in bytes. Set to match the slot size of the image being signed. |
+| `--mcuboot-header-size <bytes>` | `0x200` | MCUboot image header size in bytes. |
+| `--mcuboot-write-align <bytes>` | `4` | Flash write alignment in bytes. |
+| `--keygen <path>` | — | Generate a new ECDSA P-256 signing key and write to path. Exits after generation. |
+| `--getpub <path>` | — | Extract public key from `--sign-key` as a C source file. Requires `--sign-key`. Exits after extraction. |
+| `--list-images` | false | List images in the MCUboot primary and secondary slots via SMP. Requires `--serialport`. |
+| `--confirm-image` | false | Confirm the pending image (make it permanent) via SMP. Requires `--serialport`. |
+| `--test-image` | false | Mark the pending image for a test boot via SMP. Requires `--serialport`. |
+| `--erase-image` | false | Erase the MCUboot secondary slot via SMP. Requires `--serialport`. |
+| `--image-hash <hex>` | — | Hex-encoded image hash for `--confirm-image` or `--test-image`. |
 
 ## Plain connection usage examples
 

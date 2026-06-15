@@ -258,7 +258,7 @@ namespace nanoFramework.Tools.FirmwareFlasher
             "clrfile",
             Required = false,
             Default = null,
-            HelpText = "Path to file with CLR image.")]
+            HelpText = "Path to CLR firmware image file. When used with --mcuboot, uploads this as MCUboot Image 0 (CLR firmware slot) via SMP.")]
         public string ClrFile { get; set; }
 
         [Option(
@@ -337,7 +337,7 @@ namespace nanoFramework.Tools.FirmwareFlasher
             "image",
             Required = false,
             Default = null,
-            HelpText = "Path to deployment image file to be uploaded to device.")]
+            HelpText = "Path to deployment image file to be uploaded to device. When used with --mcuboot, uploads this as MCUboot Image 1 (deployment assemblies slot) via SMP.")]
         public string DeploymentImage { get; set; }
 
         [Option(
@@ -468,6 +468,102 @@ namespace nanoFramework.Tools.FirmwareFlasher
             Default = false,
             HelpText = "Use UF2 mass storage to deploy the application instead of wire protocol. Requires the device to be in BOOTSEL mode.")]
         public bool Uf2Deploy { get; set; }
+
+        #endregion
+
+
+        #region MCUboot / SMP options
+
+        [Option(
+            "mcuboot",
+            Required = false,
+            Default = false,
+            HelpText = "Target device is running MCUboot. Uses SMP serial transport (via --serialport) for firmware updates instead of the native flash protocol.")]
+        public bool McubootTarget { get; set; }
+
+        [Option(
+            "sign-key",
+            Required = false,
+            Default = null,
+            HelpText = "Path to the PEM signing key used to sign the firmware image with imgtool before uploading via SMP.")]
+        public string SigningKeyPath { get; set; }
+
+        [Option(
+            "mcuboot-confirm",
+            Required = false,
+            Default = false,
+            HelpText = "Permanently confirm the uploaded MCUboot image after uploading. If not specified the image is marked as pending (test boot only).")]
+        public bool McubootConfirm { get; set; }
+
+        [Option(
+            "mcuboot-slot-size",
+            Required = false,
+            Default = null,
+            HelpText = "MCUboot image slot size in bytes (default 0x100000). Required when signing an image with --sign-key.")]
+        public int? McubootSlotSize { get; set; }
+
+        [Option(
+            "mcuboot-header-size",
+            Required = false,
+            Default = null,
+            HelpText = "MCUboot image header size in bytes (default 0x200). Required when signing an image with --sign-key.")]
+        public int? McubootHeaderSize { get; set; }
+
+        [Option(
+            "mcuboot-write-align",
+            Required = false,
+            Default = null,
+            HelpText = "Flash write alignment in bytes (default 4). Required when signing an image with --sign-key.")]
+        public int? McubootWriteAlignment { get; set; }
+
+        [Option(
+            "keygen",
+            Required = false,
+            Default = null,
+            HelpText = "Generate a new ECDSA P-256 MCUboot signing key and write it to the specified path. Exits after key generation.")]
+        public string KeygenOutputPath { get; set; }
+
+        [Option(
+            "getpub",
+            Required = false,
+            Default = null,
+            HelpText = "Extract the public key from the signing key at --sign-key and write it as a C source file to the specified path. Exits after extraction.")]
+        public string GetPubOutputPath { get; set; }
+
+        [Option(
+            "list-images",
+            Required = false,
+            Default = false,
+            HelpText = "List the images in the MCUboot primary and secondary slots via SMP. Requires --serialport.")]
+        public bool ListMcuImages { get; set; }
+
+        [Option(
+            "confirm-image",
+            Required = false,
+            Default = false,
+            HelpText = "Confirm the pending image (mark it permanent) via SMP without uploading. Optionally specify --image-hash to target a specific image.")]
+        public bool ConfirmImage { get; set; }
+
+        [Option(
+            "test-image",
+            Required = false,
+            Default = false,
+            HelpText = "Mark the pending image for a test boot via SMP without uploading. Optionally specify --image-hash to target a specific image.")]
+        public bool TestImage { get; set; }
+
+        [Option(
+            "erase-image",
+            Required = false,
+            Default = false,
+            HelpText = "Erase the MCUboot secondary slot via SMP without uploading. Requires --serialport.")]
+        public bool EraseImage { get; set; }
+
+        [Option(
+            "image-hash",
+            Required = false,
+            Default = null,
+            HelpText = "Hex-encoded image hash used with --confirm-image or --test-image to identify the target image.")]
+        public string ImageHash { get; set; }
 
         #endregion
 

@@ -347,6 +347,11 @@
           "System.Runtime": "4.3.0"
         }
       },
+      "System.Formats.Cbor": {
+        "type": "Transitive",
+        "resolved": "8.0.0",
+        "contentHash": "pOFOuygoSX5Tj82uaDTFQ8ipVOKJWSZtgSdR/uCvvXtnV5z6UbbUWFsaQ/8sBerEstvVjX1DyPcVM7ua7GWHqw=="
+      },
       "System.Globalization": {
         "type": "Transitive",
         "resolved": "4.3.0",
@@ -762,6 +767,7 @@
           "Microsoft.Extensions.Configuration": "[8.0.0, )",
           "Microsoft.Extensions.Configuration.Json": "[8.0.1, )",
           "System.ComponentModel.Annotations": "[5.0.0, )",
+          "System.Formats.Cbor": "[8.0.0, )",
           "System.IO.Ports": "[8.0.0, )",
           "System.Net.Http": "[4.3.4, )",
           "System.Text.Json": "[8.0.5, )",
