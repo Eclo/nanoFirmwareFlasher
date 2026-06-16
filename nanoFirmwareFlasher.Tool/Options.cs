@@ -565,6 +565,13 @@ namespace nanoFramework.Tools.FirmwareFlasher
             HelpText = "Hex-encoded image hash used with --confirm-image or --test-image to identify the target image.")]
         public string ImageHash { get; set; }
 
+        [Option(
+            "secondary-slot",
+            Required = false,
+            Default = null,
+            HelpText = "Upload the image to the secondary slot.")]
+        public bool SecondarySlot { get; set; }
+
         #endregion
 
 

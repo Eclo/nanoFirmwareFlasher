@@ -5,6 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Threading.Tasks;
 using nanoFramework.Tools.Debugger.NFDevice;
 using nanoFramework.Tools.FirmwareFlasher.Mcuboot;
@@ -258,10 +259,10 @@ namespace nanoFramework.Tools.FirmwareFlasher
 
         private async Task<ExitCodes> UploadFlowAsync()
         {
-            bool hasCLR = !string.IsNullOrEmpty(_options.ClrFile);
-            bool hasDeploy = !string.IsNullOrEmpty(_options.DeploymentImage);
+            bool imageIsClr = !string.IsNullOrEmpty(_options.ClrFile);
+            bool imageIsDeploy = !string.IsNullOrEmpty(_options.DeploymentImage);
 
-            if (!hasCLR && !hasDeploy)
+            if (!imageIsClr && !imageIsDeploy)
             {
                 OutputWriter.ForegroundColor = ConsoleColor.Red;
                 OutputWriter.WriteLine("No image specified. Use --clrfile to upload a CLR firmware image (MCUboot Image 0) or --image to upload a deployment image (MCUboot Image 1).");
@@ -269,7 +270,7 @@ namespace nanoFramework.Tools.FirmwareFlasher
                 return ExitCodes.E10003;
             }
 
-            if (hasCLR && hasDeploy)
+            if (imageIsClr && imageIsDeploy)
             {
                 OutputWriter.ForegroundColor = ConsoleColor.Red;
                 OutputWriter.WriteLine("Specify either --clrfile (CLR firmware, Image 0) or --image (deployment, Image 1), not both. Run nanoff twice for separate CLR and deployment updates.");
@@ -277,11 +278,23 @@ namespace nanoFramework.Tools.FirmwareFlasher
                 return ExitCodes.E9000;
             }
 
-            string imagePath = hasCLR ? _options.ClrFile : _options.DeploymentImage;
-            // MCUboot Image 0 = CLR firmware (secondary slot = upgrade candidate)
-            // MCUboot Image 1 = deployment assemblies (secondary slot = upgrade candidate)
-            int imageIndex = hasCLR ? 0 : 1;
-            string imageLabel = hasCLR ? "CLR firmware" : "deployment image";
+            string imagePath = imageIsClr ? _options.ClrFile : _options.DeploymentImage;
+            int imageIndex = GetImageIndex(_options);
+
+            StringBuilder imageLabel = new StringBuilder();
+            if (imageIsClr)
+            {
+                imageLabel.Append("CLR firmware");
+            }
+            else
+            {
+                imageLabel.Append("deployment image");
+            }
+
+            if(_options.SecondarySlot)
+            {
+                imageLabel.Append(" @ secondary slot");
+            }
 
             if (!File.Exists(imagePath))
             {
@@ -319,7 +332,11 @@ namespace nanoFramework.Tools.FirmwareFlasher
                 OutputWriter.WriteLine($"{imageLabel}: {imagePath} ({imageBytes.Length:N0} bytes)");
             }
 
-            return await RunWithClientAsync(client => UploadImageToClientAsync(client, imageBytes, imageIndex, imageLabel));
+            return await RunWithClientAsync(client => UploadImageToClientAsync(
+                client,
+                imageBytes,
+                imageIndex,
+                imageLabel.ToString()));
         }
 
         private async Task<ExitCodes> UploadImageToClientAsync(McumgrClient client, byte[] imageBytes, int imageIndex, string imageLabel)
@@ -486,6 +503,44 @@ namespace nanoFramework.Tools.FirmwareFlasher
             }
 
             return result;
+        }
+
+        /// <summary>
+        /// Get the image index to use for upload based on options.
+        /// </summary>
+        /// <param name="options"></param>
+        /// <returns></returns>
+        /// <remarks>
+        /// This index is hardcoded based on the implementation of flash_area_id_from_direct_image() in the nanoCLR.
+        /// Match the index to MCUboot\common\flash_map_extend.c
+        /// </remarks>
+
+        private int GetImageIndex(Options options)
+        {
+            int tentativeIndex = 0;
+
+            if (options.ClrFile != null)
+            {
+                // MCUboot Image 0 is for the CLR firmware
+                tentativeIndex = 0;
+            }
+            else if (options.DeploymentImage != null)
+            {
+                // MCUboot Image 1 is for the deployment image
+                tentativeIndex = 1;
+            }
+            else
+            {
+                throw new InvalidOperationException("No image specified in options.");
+            }
+
+            if (options.SecondarySlot)
+            {
+                // use the secondaty slot
+                tentativeIndex++;
+            }
+
+            return tentativeIndex;
         }
     }
 }
