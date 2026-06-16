@@ -326,12 +326,6 @@ namespace nanoFramework.Tools.FirmwareFlasher
                 return ExitCodes.E10003;
             }
 
-            if (_verbosity >= VerbosityLevel.Normal)
-            {
-                OutputWriter.ForegroundColor = ConsoleColor.White;
-                OutputWriter.WriteLine($"{imageLabel}: {imagePath} ({imageBytes.Length:N0} bytes)");
-            }
-
             return await RunWithClientAsync(client => UploadImageToClientAsync(
                 client,
                 imageBytes,
@@ -341,56 +335,84 @@ namespace nanoFramework.Tools.FirmwareFlasher
 
         private async Task<ExitCodes> UploadImageToClientAsync(McumgrClient client, byte[] imageBytes, int imageIndex, string imageLabel)
         {
-            if (_verbosity >= VerbosityLevel.Normal)
+            string uploadingPrefix = $"Uploading {imageLabel}...";
+            bool normal = _verbosity >= VerbosityLevel.Normal;
+
+            // Lines on screen while uploading:
+            //   Uploading <label>...               (finalized with OK once upload completes)
+            //     Preparing storage at device...OK  (the first frame erases the slot)
+            //     NN% (sent / total bytes)          (updated in place via \r)
+            // When the upload completes the cursor rolls back up to the "Uploading..." line
+            // to write OK, leaving a single clean line.
+            bool progressStarted = false;
+
+            if (normal)
             {
                 OutputWriter.ForegroundColor = ConsoleColor.White;
-                OutputWriter.WriteLine($"Uploading {imageLabel}...");
-                // Written without newline so the first progress report overwrites it with \r.
+                OutputWriter.WriteLine(uploadingPrefix);
                 OutputWriter.Write("  Preparing storage at device...");
             }
 
-            var uploadProgress = new Progress<McumgrUploadProgress>(p =>
+            // Synchronous reporter so progress callbacks run inline on the upload thread; this
+            // keeps the output ordered (Progress<T> marshals callbacks and can fire after completion).
+            var uploadProgress = new SynchronousProgress<McumgrUploadProgress>(p =>
             {
-                if (_verbosity >= VerbosityLevel.Normal)
+                if (!normal)
                 {
-                    OutputWriter.Write($"\r  {p.PercentComplete,3}% ({p.BytesSent:N0} / {p.TotalBytes:N0} bytes)");
+                    return;
                 }
+
+                if (!progressStarted)
+                {
+                    // first chunk accepted: storage is prepared
+                    progressStarted = true;
+                    OutputWriter.ForegroundColor = ConsoleColor.Green;
+                    OutputWriter.WriteLine("OK");
+                    OutputWriter.ForegroundColor = ConsoleColor.White;
+                }
+
+                OutputWriter.Write($"\r  {p.PercentComplete,3}% ({p.BytesSent:N0} / {p.TotalBytes:N0} bytes)");
             });
 
             try
             {
                 await client.UploadImageAsync(imageBytes, imageIndex, uploadProgress, default);
 
-                if (_verbosity >= VerbosityLevel.Normal)
+                if (normal)
                 {
+                    // roll back over the progress (and preparing) lines, then finalize the upload line
+                    RewindStatusLines(progressStarted ? 2 : 1);
+                    OutputWriter.ForegroundColor = ConsoleColor.White;
+                    OutputWriter.Write(uploadingPrefix);
                     OutputWriter.ForegroundColor = ConsoleColor.Green;
-                    // \r overwrites the last progress line; pad to cover any leftover characters.
-                    OutputWriter.WriteLine($"\r  {imageLabel} upload complete.           ");
+                    OutputWriter.WriteLine("OK");
                     OutputWriter.ForegroundColor = ConsoleColor.White;
                 }
             }
             catch (McumgrProtocolException ex)
             {
                 OutputWriter.ForegroundColor = ConsoleColor.Red;
-                OutputWriter.WriteLine($"\r  {imageLabel} upload failed: {ex.Message}");
+                OutputWriter.WriteLine($"\r{uploadingPrefix}FAILED: {ex.Message}");
                 OutputWriter.ForegroundColor = ConsoleColor.White;
                 return ExitCodes.E10010;
             }
             catch (McumgrTimeoutException ex)
             {
                 OutputWriter.ForegroundColor = ConsoleColor.Red;
-                OutputWriter.WriteLine($"\r  {imageLabel} upload timed out: {ex.Message}");
+                OutputWriter.WriteLine($"\r{uploadingPrefix}TIMED OUT: {ex.Message}");
                 OutputWriter.ForegroundColor = ConsoleColor.White;
                 return ExitCodes.E10007;
             }
 
-            if (_options.McubootConfirm)
+            if (_options.SecondarySlot)
             {
-                if (_verbosity >= VerbosityLevel.Normal)
-                {
-                    OutputWriter.WriteLine($"Confirming {imageLabel} (permanent)...");
-                }
-
+                // Image was written directly into the secondary slot (direct-XIP / overwrite-only
+                // mode). MCUboot will execute it from there without a swap, so test/confirm must
+                // NOT be issued — the pending-swap flag either has no effect or would trigger an
+                // unwanted swap back to the primary slot.
+            }
+            else if (_options.McubootConfirm)
+            {
                 try
                 {
                     await client.ConfirmImageAsync(null);
@@ -405,11 +427,6 @@ namespace nanoFramework.Tools.FirmwareFlasher
             }
             else
             {
-                if (_verbosity >= VerbosityLevel.Normal)
-                {
-                    OutputWriter.WriteLine($"Marking {imageLabel} as pending (test boot)...");
-                }
-
                 try
                 {
                     await client.TestImageAsync(null);
@@ -425,7 +442,8 @@ namespace nanoFramework.Tools.FirmwareFlasher
 
             if (_verbosity >= VerbosityLevel.Normal)
             {
-                OutputWriter.WriteLine("Resetting device...");
+                OutputWriter.ForegroundColor = ConsoleColor.White;
+                OutputWriter.Write("Resetting device...");
             }
 
             try
@@ -440,13 +458,63 @@ namespace nanoFramework.Tools.FirmwareFlasher
             if (_verbosity >= VerbosityLevel.Normal)
             {
                 OutputWriter.ForegroundColor = ConsoleColor.Green;
-                OutputWriter.WriteLine(_options.McubootConfirm
-                    ? $"{imageLabel} update complete. Image confirmed and device reset."
-                    : $"{imageLabel} update complete. Device will boot new image on next reset.");
+                OutputWriter.WriteLine("OK");
                 OutputWriter.ForegroundColor = ConsoleColor.White;
             }
 
             return ExitCodes.OK;
+        }
+
+        /// <summary>
+        /// Clears the current line and <paramref name="linesAbove"/> lines above it, then leaves
+        /// the cursor at the start of the topmost cleared line so it can be rewritten. Falls back
+        /// to a simple newline when the output is redirected and cannot be repositioned.
+        /// </summary>
+        private static void RewindStatusLines(int linesAbove)
+        {
+            if (Console.IsOutputRedirected)
+            {
+                OutputWriter.WriteLine();
+                return;
+            }
+
+            try
+            {
+                int bottom = Console.CursorTop;
+                int width = Console.WindowWidth;
+
+                for (int i = 0; i <= linesAbove; i++)
+                {
+                    int line = bottom - i;
+                    if (line < 0)
+                    {
+                        break;
+                    }
+
+                    Console.SetCursorPosition(0, line);
+                    Console.Write(new string(' ', width));
+                }
+
+                Console.SetCursorPosition(0, Math.Max(0, bottom - linesAbove));
+            }
+            catch
+            {
+                // cursor repositioning not supported in this environment; continue on a new line
+                OutputWriter.WriteLine();
+            }
+        }
+
+        /// <summary>
+        /// An <see cref="IProgress{T}"/> that invokes its handler synchronously on the calling
+        /// thread, preserving output ordering (unlike <see cref="Progress{T}"/>, which marshals).
+        /// </summary>
+        private sealed class SynchronousProgress<T> : IProgress<T>
+        {
+            private readonly Action<T> _handler;
+
+            public SynchronousProgress(Action<T> handler) => _handler = handler;
+
+            public void Report(T value) => _handler(value);
         }
 
         private ExitCodes SignImage(ref string imagePath)
