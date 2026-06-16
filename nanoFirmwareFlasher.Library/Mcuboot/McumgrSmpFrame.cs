@@ -113,8 +113,12 @@ namespace nanoFramework.Tools.FirmwareFlasher.Mcuboot
     /// </summary>
     /// <remarks>
     /// Wire format per line:
-    ///   First line:         0x06 0x09 + base64_chunk + \n
-    ///   Continuation lines: 0x04 0x14 + base64_chunk + \n
+    ///   First line:         0x06 0x09 + base64_chunk + \r\n
+    ///   Continuation lines: 0x04 0x14 + base64_chunk + \r\n
+    ///
+    /// Lines are terminated with CR+LF: the MCUboot boot_serial decoder
+    /// reads each line and base64-decodes (inlen - 2) bytes, i.e. it assumes a
+    /// two-byte line terminator and strips it.
     ///
     /// The base64-encoded content is:
     ///   [2-byte BE length of (header + CBOR + CRC)] + [8-byte nmgr header] + [CBOR payload] + [2-byte CRC16-CCITT]
@@ -228,6 +232,10 @@ namespace nanoFramework.Tools.FirmwareFlasher.Mcuboot
 
                 byte[] chunk = Encoding.ASCII.GetBytes(b64.Substring(i, chunkLen));
                 ms.Write(chunk, 0, chunk.Length);
+
+                // CR+LF terminator: the boot_serial decoder strips a two-byte
+                // line terminator (base64_decode of inlen - 2).
+                ms.WriteByte((byte)'\r');
                 ms.WriteByte((byte)'\n');
             }
 
