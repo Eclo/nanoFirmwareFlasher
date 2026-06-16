@@ -122,7 +122,7 @@ namespace nanoFramework.Tools.FirmwareFlasher
             try
             {
                 Version latestVersion;
-                Version currentVersion = Version.Parse(_informationalVersionAttribute.InformationalVersion.Split('+')[0]);
+                Version currentVersion = Version.Parse(_informationalVersionAttribute.InformationalVersion.Split('+')[0].Replace("-preview.", ""));
 
                 using (var client = new HttpClient())
                 {
