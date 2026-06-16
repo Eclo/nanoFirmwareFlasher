@@ -33,19 +33,26 @@ No configuration is required.
 3. Run the tool or a test with the debugger attached (F5) or without (Ctrl+F5,
    if `Debugger.Launch()` or a debug listener is configured).
 
-Sample output for a single-chunk upload followed by an image-list query:
+Sample output for a single-chunk upload followed by an image-state query:
 
 ```
-SMP TX: Write Image/Upload seq=0x03 payloadLen=140 hdr=[44-00-00-8C-00-01-03-01] payload=[A4-64-64-61-74-61-58-80-00-01-02-03 (+128 more bytes)] 14:22:05.123
-SMP RX: WriteResponse Image/Upload seq=0x03 payloadLen=5 payload=[A1-62-72-63-00] round-trip=00.1823 14:22:05.306
-SMP TX: Read Image/State seq=0x04 payloadLen=1 hdr=[00-00-00-01-00-01-04-00] payload=[A0] 14:22:05.310
-SMP RX: ReadResponse Image/State seq=0x04 payloadLen=87 payload=[A1-66-69-6D-61-67-65-73-81-A7-65-69...] round-trip=00.0941 14:22:05.404
+SMP TX  Write Image/Upload  seq=0x03 payloadLength=140  14:22:05.123
+        header =[02-00-00-8C-00-01-03-01]
+        payload=[A4-64-64-61-74-61-58-80-00-01-02-03 (+128 more bytes)]
+SMP RX  WriteResponse Image/Upload  seq=0x03 payLen=5  round-trip=00.1823  14:22:05.306
+        pld=[A1-62-72-63-00]
+SMP TX  Read Image/State  seq=0x04 payloadLength=1  14:22:05.310
+        header =[00-00-00-01-00-01-04-00]
+        payload=[A0]
+SMP RX  ReadResponse Image/State  seq=0x04 payLen=87  round-trip=00.0941  14:22:05.404
+        pld=[A1-66-69-6D-61-67-65-73-81-A7-65-69-6D-61-67-65-73 (+71 more bytes)]
 ```
 
 A timeout looks like:
 
 ```
-SMP RX: Image/Upload *** TIMEOUT *** seq=0x05 elapsed=05.0001 receivedBytes=3 received=[06-09-41]
+SMP RX  Image/Upload *** TIMEOUT ***  seq=0x05 elapsed=05.0001  receivedBytes=3
+        rcv=[06-09-41]
 ```
 
 The three received bytes (`06-09-41`) show a partial start-of-frame marker followed by
