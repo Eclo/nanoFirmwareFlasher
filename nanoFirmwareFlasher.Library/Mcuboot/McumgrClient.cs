@@ -49,7 +49,7 @@ namespace nanoFramework.Tools.FirmwareFlasher.Mcuboot
         public McumgrClient(
             string portName,
             int baudRate = 115_200,
-            int timeoutMs = 5_000,
+            int timeoutMs = 20_000,
             int chunkSize = 48,
             VerbosityLevel verbosity = VerbosityLevel.Normal)
         {
