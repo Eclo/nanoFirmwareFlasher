@@ -5,7 +5,6 @@ using System;
 using System.Collections.Generic;
 using System.Formats.Cbor;
 using System.IO.Ports;
-using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -40,11 +39,11 @@ namespace nanoFramework.Tools.FirmwareFlasher.Mcuboot
         /// <param name="timeoutMs">Response timeout in milliseconds.</param>
         /// <param name="chunkSize">
         /// Maximum binary bytes per upload chunk. Must be small enough that the encoded
-        /// SMP frame fits in a single boot_serial line (max 124 base64 chars = 93 raw bytes).
-        /// The worst-case CBOR overhead for the first chunk (which carries "len", "image", and
-        /// "sha" fields) is ~50 bytes, leaving 93 - 50 = 43 bytes of data. 48 is used as the default
-        /// to keep a safe margin. Larger values cause multi-line frames which fail on platforms
-        /// where the serial read delivers all buffered bytes in a single call.
+        /// SMP frame fits in a single boot_serial line (max 124 base64 chars = 93 raw bytes);
+        /// Raw frame = 2 (length prefix) + 8 (SMP header) + payload + 2 (CRC), so the CBOR
+        /// payload must stay &lt;= 81 bytes. The first chunk's worst-case CBOR overhead
+        /// ("image" + "off" + "len" + "data") is ~29 bytes, leaving ~52 bytes for data; 48
+        /// keeps a safe margin.
         /// </param>
         /// <param name="verbosity">Output verbosity.</param>
         public McumgrClient(
@@ -180,10 +179,6 @@ namespace nanoFramework.Tools.FirmwareFlasher.Mcuboot
             IProgress<McumgrUploadProgress> progress,
             CancellationToken ct)
         {
-            byte[] sha;
-            using (SHA256 hasher = SHA256.Create())
-                sha = hasher.ComputeHash(data);
-
             int offset = 0;
             int remaining;
             int chunkLen;
@@ -202,7 +197,12 @@ namespace nanoFramework.Tools.FirmwareFlasher.Mcuboot
                 Buffer.BlockCopy(data, offset, chunk, 0, chunkLen);
 
                 isFirst = offset == 0;
-                payload = EncodeUploadChunk(chunk, offset, data.Length, slot, isFirst, sha: isFirst ? sha : null);
+
+                // NOTE: the "sha" field is intentionally not sent. The MCUboot boot_serial
+                // loader (bs_upload) does not decode it, and a 32-byte hash inflates the first
+                // chunk past the 124-base64-char single-line budget, producing a multi-line
+                // frame that the device's all-at-once serial read cannot decode.
+                payload = EncodeUploadChunk(chunk, offset, data.Length, slot, isFirst, sha: null);
                 SendCommand(SmpOpCode.Write, SmpGroup.Image, (byte)ImageCommandId.Upload, payload, ct);
                 rsp = ReceiveFrame(ct).Payload;
 
