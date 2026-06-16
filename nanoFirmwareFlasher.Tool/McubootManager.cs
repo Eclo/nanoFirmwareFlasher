@@ -345,6 +345,8 @@ namespace nanoFramework.Tools.FirmwareFlasher
             {
                 OutputWriter.ForegroundColor = ConsoleColor.White;
                 OutputWriter.WriteLine($"Uploading {imageLabel}...");
+                // Written without newline so the first progress report overwrites it with \r.
+                OutputWriter.Write("  Preparing storage at device...");
             }
 
             var uploadProgress = new Progress<McumgrUploadProgress>(p =>
@@ -361,25 +363,23 @@ namespace nanoFramework.Tools.FirmwareFlasher
 
                 if (_verbosity >= VerbosityLevel.Normal)
                 {
-                    OutputWriter.WriteLine();
                     OutputWriter.ForegroundColor = ConsoleColor.Green;
-                    OutputWriter.WriteLine($"{imageLabel} upload complete.");
+                    // \r overwrites the last progress line; pad to cover any leftover characters.
+                    OutputWriter.WriteLine($"\r  {imageLabel} upload complete.           ");
                     OutputWriter.ForegroundColor = ConsoleColor.White;
                 }
             }
             catch (McumgrProtocolException ex)
             {
-                OutputWriter.WriteLine();
                 OutputWriter.ForegroundColor = ConsoleColor.Red;
-                OutputWriter.WriteLine($"{imageLabel} upload failed: {ex.Message}");
+                OutputWriter.WriteLine($"\r  {imageLabel} upload failed: {ex.Message}");
                 OutputWriter.ForegroundColor = ConsoleColor.White;
                 return ExitCodes.E10010;
             }
             catch (McumgrTimeoutException ex)
             {
-                OutputWriter.WriteLine();
                 OutputWriter.ForegroundColor = ConsoleColor.Red;
-                OutputWriter.WriteLine($"{imageLabel} upload timed out: {ex.Message}");
+                OutputWriter.WriteLine($"\r  {imageLabel} upload timed out: {ex.Message}");
                 OutputWriter.ForegroundColor = ConsoleColor.White;
                 return ExitCodes.E10007;
             }
