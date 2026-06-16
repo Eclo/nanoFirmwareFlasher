@@ -65,7 +65,13 @@ namespace nanoFramework.Tools.FirmwareFlasher.Mcuboot
         /// <param name="commandId">Command identifier.</param>
         /// <param name="payloadLength">CBOR payload length in bytes.</param>
         /// <param name="flags">Protocol flags byte (defaults to 0).</param>
-        public SmpHeader(SmpOpCode op, SmpGroup group, byte seq, byte commandId, ushort payloadLength, byte flags = 0)
+        public SmpHeader(
+            SmpOpCode op,
+            SmpGroup group,
+            byte seq,
+            byte commandId,
+            ushort payloadLength,
+            byte flags = 0)
         {
             Op = op;
             Flags = flags;
@@ -127,8 +133,12 @@ namespace nanoFramework.Tools.FirmwareFlasher.Mcuboot
     /// </remarks>
     internal sealed class McumgrSmpFrame
     {
-        /// <summary>Maximum base64 characters per boot_serial line.</summary>
-        private const int MaxLineChars      = 124;
+        /// <summary>
+        /// Maximum base64 characters per boot_serial line.
+        /// MCUBOOT_SERIAL_MAX_RECEIVE_SIZE=512 minus 2 marker bytes minus 2 CR+LF bytes = 508,
+        /// which is exactly divisible by 4 (the base64 block size).
+        /// </summary>
+        private const int MaxLineChars      = 508;
 
         /// <summary>Bytes for the per-line framing marker (0x06 0x09 or 0x04 0x14).</summary>
         private const int FramingMarkerSize = 2;

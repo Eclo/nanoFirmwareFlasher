@@ -39,18 +39,19 @@ namespace nanoFramework.Tools.FirmwareFlasher.Mcuboot
         /// <param name="timeoutMs">Response timeout in milliseconds.</param>
         /// <param name="chunkSize">
         /// Maximum binary bytes per upload chunk. Must be small enough that the encoded
-        /// SMP frame fits in a single boot_serial line (max 124 base64 chars = 93 raw bytes);
-        /// Raw frame = 2 (length prefix) + 8 (SMP header) + payload + 2 (CRC), so the CBOR
-        /// payload must stay &lt;= 81 bytes. The first chunk's worst-case CBOR overhead
-        /// ("image" + "off" + "len" + "data") is ~29 bytes, leaving ~52 bytes for data; 48
-        /// keeps a safe margin.
+        /// SMP frame fits in a single boot_serial line (max 508 base64 chars = 381 raw bytes,
+        /// derived from MCUBOOT_SERIAL_MAX_RECEIVE_SIZE=512 minus the 2 marker bytes and 2
+        /// CR+LF bytes). Raw frame = 2 (length prefix) + 8 (SMP header) + payload + 2 (CRC),
+        /// so the CBOR payload must stay &lt;= 369 bytes. The first chunk's worst-case CBOR
+        /// overhead ("image" + "off" + "len" + "data") is ~33 bytes, leaving ~336 bytes for
+        /// data; 320 keeps a safe margin and is flash-write aligned.
         /// </param>
         /// <param name="verbosity">Output verbosity.</param>
         public McumgrClient(
             string portName,
-            int baudRate = 115_200,
+            int baudRate = 921_600,
             int timeoutMs = 20_000,
-            int chunkSize = 48,
+            int chunkSize = 320,
             VerbosityLevel verbosity = VerbosityLevel.Normal)
         {
             _port = new SerialPort(portName, baudRate, Parity.None, 8, StopBits.One)
@@ -199,9 +200,9 @@ namespace nanoFramework.Tools.FirmwareFlasher.Mcuboot
                 isFirst = offset == 0;
 
                 // NOTE: the "sha" field is intentionally not sent. The MCUboot boot_serial
-                // loader (bs_upload) does not decode it, and a 32-byte hash inflates the first
-                // chunk past the 124-base64-char single-line budget, producing a multi-line
-                // frame that the device's all-at-once serial read cannot decode.
+                // loader (bs_upload) does not decode it, and a 32-byte hash eats into the
+                // single-line budget, risking a multi-line frame that the device's
+                // all-at-once serial read cannot decode.
                 payload = EncodeUploadChunk(chunk, offset, data.Length, slot, isFirst, sha: null);
                 SendCommand(SmpOpCode.Write, SmpGroup.Image, (byte)ImageCommandId.Upload, payload, ct);
                 rsp = ReceiveFrame(ct).Payload;
