@@ -492,18 +492,27 @@ namespace nanoFramework.Tools.FirmwareFlasher.Mcuboot
             ct.ThrowIfCancellationRequested();
 
             byte seq = _seq++;
-            var txFrame = new McumgrSmpFrame(op, group, seq, id, payload);
-            byte[] wireBytes = txFrame.ToWireBytes();
+            var txFrame = new McumgrSmpFrame(
+                op,
+                group,
+                seq,
+                id,
+                payload);
 
             _lastTxTimestamp = DateTime.UtcNow;
             _lastTxGroup = group;
             _lastTxCommandId = id;
             _lastTxSeq = seq;
 
-            McumgrEventSource.Log.SmpTxFrame(op, group, id, seq, payload.Length, txFrame.Header.ToBytes(), payload);
+            McumgrEventSource.Log.SmpTxFrame(op, group, id, seq, payload.Length, txFrame);
 
             _port.DiscardInBuffer();
-            _port.Write(wireBytes, 0, wireBytes.Length);
+
+            byte[] wireBytes = txFrame.ToWireBytes();
+            _port.Write(
+                wireBytes,
+                0,
+                wireBytes.Length);
         }
 
         private McumgrSmpFrame ReceiveFrame(CancellationToken ct)

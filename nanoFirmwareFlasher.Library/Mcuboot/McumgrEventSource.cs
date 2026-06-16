@@ -86,11 +86,11 @@ namespace nanoFramework.Tools.FirmwareFlasher.Mcuboot
 
         /// <summary>Emitted immediately before an SMP frame is written to the serial port.</summary>
         [Event(1, Opcode = EventOpcode.Send)]
-        public void SmpTxFrame(SmpOpCode op, SmpGroup group, byte id, byte seq, int payloadLen, byte[] header, byte[] payload)
+        public void SmpTxFrame(SmpOpCode op, SmpGroup group, byte id, byte seq, int payloadLen, McumgrSmpFrame frame)
         {
             Debug.WriteLine($"SMP TX  {op} {GetGroupName(group)}/{GetCommandName(group, id)}  seq=0x{seq:X02} payloadLength={payloadLen}  {DateTime.Now:HH:mm:ss.fff}");
-            Debug.WriteLine($"        header =[{FormatHex(header)}]");
-            Debug.WriteLine($"        payload=[{FormatHex(payload)}]");
+            Debug.WriteLine($"        header =[{FormatHex(frame.Header.ToBytes())}]");
+            Debug.WriteLine($"        payload=[{FormatHex(frame.Payload)}]");
         }
 
         /// <summary>Emitted when a complete SMP frame has been decoded from the serial port.</summary>
