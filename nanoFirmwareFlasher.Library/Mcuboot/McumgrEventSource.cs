@@ -13,9 +13,10 @@ namespace nanoFramework.Tools.FirmwareFlasher.Mcuboot
     /// Event source name: <c>nanoFramework-McumgrClient</c>.
     /// </summary>
     /// <remarks>
-    /// In Debug builds every event writes to <c>Debug.WriteLine</c> and is immediately
-    /// visible in the Visual Studio Output window (no setup required).
-    /// In Release builds the output is suppressed; attach an <see cref="EventListener"/> or
+    /// In Debug builds with the <c>TRACE</c> compiler symbol defined, every event writes to
+    /// <c>Debug.WriteLine</c> and is immediately visible in the Visual Studio Output window
+    /// (no setup required).
+    /// Otherwise the output is suppressed; attach an <see cref="EventListener"/> or
     /// use <c>dotnet-trace</c> / PerfView with the provider name
     /// <c>nanoFramework-McumgrClient</c> to capture events at runtime.
     /// </remarks>
@@ -88,25 +89,31 @@ namespace nanoFramework.Tools.FirmwareFlasher.Mcuboot
         [Event(1, Opcode = EventOpcode.Send)]
         public void SmpTxFrame(SmpOpCode op, SmpGroup group, byte id, byte seq, int payloadLen, McumgrSmpFrame frame)
         {
+#if DEBUG && TRACE
             Debug.WriteLine($"SMP TX  {op} {GetGroupName(group)}/{GetCommandName(group, id)}  seq=0x{seq:X02} payloadLength={payloadLen}  {DateTime.Now:HH:mm:ss.fff}");
             Debug.WriteLine($"        header =[{FormatHex(frame.Header.ToBytes())}]");
             Debug.WriteLine($"        payload=[{FormatHex(frame.Payload)}]");
+#endif
         }
 
         /// <summary>Emitted when a complete SMP frame has been decoded from the serial port.</summary>
         [Event(2, Opcode = EventOpcode.Receive)]
         public void SmpRxFrame(SmpOpCode op, SmpGroup group, byte id, byte seq, int payloadLen, byte[] payload, TimeSpan roundTrip)
         {
+#if DEBUG && TRACE
             Debug.WriteLine($"SMP RX  {op} {GetGroupName(group)}/{GetCommandName(group, id)}  seq=0x{seq:X02} payLen={payloadLen}  round-trip={roundTrip:ss\\.ffff}  {DateTime.Now:HH:mm:ss.fff}");
             Debug.WriteLine($"        pld=[{FormatHex(payload)}]");
+#endif
         }
 
         /// <summary>Emitted when the receive deadline expires before a complete frame arrives.</summary>
         [Event(3, Opcode = EventOpcode.Info)]
         public void SmpRxTimeout(SmpGroup group, byte id, byte seq, TimeSpan elapsed, byte[] receivedBytes)
         {
+#if DEBUG && TRACE
             Debug.WriteLine($"SMP RX  {GetGroupName(group)}/{GetCommandName(group, id)} *** TIMEOUT ***  seq=0x{seq:X02} elapsed={elapsed:ss\\.ffff}  receivedBytes={receivedBytes?.Length ?? 0}");
             Debug.WriteLine($"        rcv=[{FormatHex(receivedBytes ?? Array.Empty<byte>())}]");
+#endif
         }
     }
 }
