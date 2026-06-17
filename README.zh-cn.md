@@ -421,17 +421,9 @@ nanoff --mcuboot --serialport COM31 --clrfile "C:\fw\nanoCLR-signed.bin"
 nanoff --mcuboot --serialport COM31 --image "C:\fw\deployment-signed.bin"
 ```
 
-#### 上传并永久确认
+#### 镜像激活与确认
 
-默认情况下，上传的镜像被标记为**待定**（测试启动）：设备启动一次后，除非新固件自行确认，否则回滚到之前的镜像。添加 `--mcuboot-confirm` 立即永久确认：
-
-```console
-nanoff --mcuboot --serialport COM31 --clrfile "C:\fw\nanoCLR-signed.bin" --mcuboot-confirm
-```
-
-```console
-nanoff --mcuboot --serialport COM31 --image "C:\fw\deployment-signed.bin" --mcuboot-confirm
-```
+镜像直接写入**主槽**，设备在下次重启时启动该镜像——烧录工具不会发出 test/confirm 步骤。新镜像是否永久生效（以及如何处理回滚）由运行中的固件通过 MCUboot 运行时接口管理，而非 `nanoff`。
 
 #### 通过 SMP 更新 STM32 目标
 
@@ -445,19 +437,6 @@ nanoff --mcuboot --update --target ORGPAL_PALTHREE --serialport COM3 --sign-key 
 
 ```console
 nanoff --mcuboot --list-images --serialport COM31
-```
-
-#### 确认待定镜像（使其永久）
-
-```console
-nanoff --mcuboot --confirm-image --serialport COM31
-nanoff --mcuboot --confirm-image --serialport COM31 --image-hash ef567890...
-```
-
-#### 标记镜像为测试启动
-
-```console
-nanoff --mcuboot --test-image --serialport COM31 --image-hash ef567890...
 ```
 
 #### 擦除次槽
@@ -474,17 +453,14 @@ nanoff --mcuboot --erase-image --serialport COM31
 | `--clrfile <路径>` | — | CLR 固件镜像路径。使用 `--mcuboot` 时，通过 SMP 作为 MCUboot Image 0（CLR 槽）上传。 |
 | `--image <路径>` | — | 部署程序集镜像路径。使用 `--mcuboot` 时，通过 SMP 作为 MCUboot Image 1（部署槽）上传。 |
 | `--sign-key <路径>` | — | PEM 签名密钥路径。上传前使用 `imgtool` 签名镜像。 |
-| `--mcuboot-confirm` | false | 上传后永久确认镜像。不指定此标志则为测试启动。 |
+| `--secondary-slot` | false | 仅用于开发。将镜像上传到副槽而非主槽。 |
 | `--mcuboot-slot-size <字节>` | `0x100000` | 镜像槽大小（字节）。需与所签名镜像的槽大小匹配。 |
 | `--mcuboot-header-size <字节>` | `0x200` | MCUboot 镜像头大小（字节）。 |
 | `--mcuboot-write-align <字节>` | `4` | Flash 写入对齐（字节）。 |
 | `--keygen <路径>` | — | 生成新的 ECDSA P-256 签名密钥并写入路径。生成后退出。 |
 | `--getpub <路径>` | — | 从 `--sign-key` 提取公钥为 C 源文件。需要 `--sign-key`。提取后退出。 |
 | `--list-images` | false | 通过 SMP 列出 MCUboot 主槽和次槽中的镜像。需要 `--serialport`。 |
-| `--confirm-image` | false | 通过 SMP 确认待定镜像（使其永久）。需要 `--serialport`。 |
-| `--test-image` | false | 通过 SMP 将待定镜像标记为测试启动。需要 `--serialport`。 |
 | `--erase-image` | false | 通过 SMP 擦除 MCUboot 次槽。需要 `--serialport`。 |
-| `--image-hash <十六进制>` | — | 用于 `--confirm-image` 或 `--test-image` 的十六进制镜像哈希。 |
 
 ## 普通连接使用示例
 

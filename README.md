@@ -437,17 +437,17 @@ To upload a signed managed deployment image (MCUboot Image 1):
 nanoff --mcuboot --serialport COM31 --image "C:\fw\deployment-signed.bin"
 ```
 
-#### Upload with permanent confirmation
+#### Upload to the secondary slot (development only)
 
-By default the uploaded image is marked as **pending** (test boot): the device boots it once and reverts to the previous image unless the new firmware explicitly self-confirms. Add `--mcuboot-confirm` to mark the image as permanently confirmed immediately after upload:
-
-```console
-nanoff --mcuboot --serialport COM31 --clrfile "C:\fw\nanoCLR-signed.bin" --mcuboot-confirm
-```
+> ⚠️ **Development/staging use only.** By default `--clrfile` and `--image` write to the **primary** slot, which is what regular updates should use. Adding `--secondary-slot` writes the image into the **secondary** slot instead. This is a developer convenience for pre-staging or inspecting a slot — it does **not** activate the image on its own. On swap-based targets the running firmware is responsible for staging the swap (via the MCUboot runtime interface), so an image placed in the secondary slot by the flasher is not booted until the firmware arms it.
 
 ```console
-nanoff --mcuboot --serialport COM31 --image "C:\fw\deployment-signed.bin" --mcuboot-confirm
+nanoff --mcuboot --serialport COM31 --clrfile "C:\fw\nanoCLR-signed.bin" --secondary-slot
 ```
+
+#### Image activation and confirmation
+
+The image is written directly to the **primary** slot and the device boots it on the next reset — no test/confirm step is issued by the flasher. Whether the new image becomes permanent (and how rollback is handled) is managed by the running firmware through the MCUboot runtime interface, not by `nanoff`.
 
 #### Update a STM32 target via SMP
 
@@ -492,24 +492,6 @@ Image 0 Slot 0  version=1.2.3.4  hash=abcd1234...  [active, confirmed, bootable]
 Image 0 Slot 1  version=1.3.0.0  hash=ef567890...  [pending, bootable]
 ```
 
-#### Confirm a pending image (make it permanent)
-
-```console
-nanoff --mcuboot --confirm-image --serialport COM31
-```
-
-To target a specific image by hash (from `--list-images` output):
-
-```console
-nanoff --mcuboot --confirm-image --serialport COM31 --image-hash ef567890...
-```
-
-#### Mark an image for test boot
-
-```console
-nanoff --mcuboot --test-image --serialport COM31 --image-hash ef567890...
-```
-
 #### Erase the secondary slot
 
 ```console
@@ -537,17 +519,14 @@ All MCUboot SMP operations use `--serialport` for the SMP transport. The SMP bau
 | `--clrfile <path>` | — | Path to CLR firmware image. With `--mcuboot`, uploads as MCUboot Image 0 (CLR slot) via SMP. |
 | `--image <path>` | — | Path to deployment assemblies image. With `--mcuboot`, uploads as MCUboot Image 1 (deployment slot) via SMP. |
 | `--sign-key <path>` | — | Path to PEM signing key. Image is signed with `imgtool` before uploading. |
-| `--mcuboot-confirm` | false | Permanently confirm the uploaded image. Without this flag the image is a test boot. |
+| `--secondary-slot` | false | Development only. Upload the image to the secondary slot instead of the primary slot. |
 | `--mcuboot-slot-size <bytes>` | `0x100000` | Image slot size in bytes. Set to match the slot size of the image being signed. |
 | `--mcuboot-header-size <bytes>` | `0x200` | MCUboot image header size in bytes. |
 | `--mcuboot-write-align <bytes>` | `4` | Flash write alignment in bytes. |
 | `--keygen <path>` | — | Generate a new ECDSA P-256 signing key and write to path. Exits after generation. |
 | `--getpub <path>` | — | Extract public key from `--sign-key` as a C source file. Requires `--sign-key`. Exits after extraction. |
 | `--list-images` | false | List images in the MCUboot primary and secondary slots via SMP. Requires `--serialport`. |
-| `--confirm-image` | false | Confirm the pending image (make it permanent) via SMP. Requires `--serialport`. |
-| `--test-image` | false | Mark the pending image for a test boot via SMP. Requires `--serialport`. |
 | `--erase-image` | false | Erase the MCUboot secondary slot via SMP. Requires `--serialport`. |
-| `--image-hash <hex>` | — | Hex-encoded image hash for `--confirm-image` or `--test-image`. |
 
 ## Plain connection usage examples
 
