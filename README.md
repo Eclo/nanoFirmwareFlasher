@@ -410,12 +410,12 @@ nanoFramework MCUboot targets use a **two-image layout**:
 
 | MCUboot image | Content | Upload option |
 | --- | --- | --- |
-| **Image 0** | nanoCLR firmware binary | `--clrfile <path>` |
+| **Image 0** | nanoCLR binary | `--clrfile <path>` |
 | **Image 1** | Managed deployment assemblies | `--image <path>` |
 
-Both images are updated independently. Specify `--clrfile` to update the CLR firmware or `--image` to update the deployment assemblies — not both in the same command.
+Both images are updated independently. Specify `--clrfile` to update the CLR image or `--image` to update the deployment assemblies — not both in the same command.
 
-#### Update CLR firmware on an ESP32 target via SMP
+#### Update CLR image on an ESP32 target via SMP
 
 ```console
 nanoff --mcuboot --update --target ESP32_GENERIC --serialport COM31 --sign-key my-signing-key.pem
@@ -516,7 +516,7 @@ All MCUboot SMP operations use `--serialport` for the SMP transport. The SMP bau
 | Option | Default | Description |
 | --- | --- | --- |
 | `--mcuboot` | false | Target device is running MCUboot. Routes firmware update to SMP transport. |
-| `--clrfile <path>` | — | Path to CLR firmware image. With `--mcuboot`, uploads as MCUboot Image 0 (CLR slot) via SMP. |
+| `--clrfile <path>` | — | Path to CLR image. With `--mcuboot`, uploads as MCUboot Image 0 (CLR slot) via SMP. |
 | `--image <path>` | — | Path to deployment assemblies image. With `--mcuboot`, uploads as MCUboot Image 1 (deployment slot) via SMP. |
 | `--sign-key <path>` | — | Path to PEM signing key. Image is signed with `imgtool` before uploading. |
 | `--secondary-slot` | false | Development only. Upload the image to the secondary slot instead of the primary slot. |

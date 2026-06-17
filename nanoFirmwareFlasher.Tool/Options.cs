@@ -258,7 +258,7 @@ namespace nanoFramework.Tools.FirmwareFlasher
             "clrfile",
             Required = false,
             Default = null,
-            HelpText = "Path to CLR firmware image file. When used with --mcuboot, uploads this as MCUboot Image 0 (CLR firmware slot) via SMP.")]
+            HelpText = "Path to CLR image file. When used with --mcuboot, uploads this as MCUboot Image 0 (CLR slot) via SMP.")]
         public string ClrFile { get; set; }
 
         [Option(

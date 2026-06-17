@@ -398,12 +398,12 @@ nanoFramework MCUboot 目标设备使用**双镜像布局**：
 
 | MCUboot 镜像 | 内容 | 上传选项 |
 | --- | --- | --- |
-| **Image 0** | nanoCLR 固件 | `--clrfile <路径>` |
+| **Image 0** | nanoCLR 二进制 | `--clrfile <路径>` |
 | **Image 1** | 托管部署程序集 | `--image <路径>` |
 
-两个镜像可独立更新。在同一命令中只能指定 `--clrfile` 或 `--image` 中的一个，不能同时使用。
+两个镜像可独立更新。指定 `--clrfile` 更新 CLR 镜像，或指定 `--image` 更新部署程序集——不能在同一命令中同时使用。
 
-#### 通过 SMP 更新 ESP32 目标的 CLR 固件
+#### 通过 SMP 更新 ESP32 目标的 CLR 镜像
 
 ```console
 nanoff --mcuboot --update --target ESP32_GENERIC --serialport COM31 --sign-key my-signing-key.pem
@@ -450,7 +450,7 @@ nanoff --mcuboot --erase-image --serialport COM31
 | 选项 | 默认值 | 描述 |
 | --- | --- | --- |
 | `--mcuboot` | false | 目标设备运行 MCUboot，通过 SMP 传输更新固件。 |
-| `--clrfile <路径>` | — | CLR 固件镜像路径。使用 `--mcuboot` 时，通过 SMP 作为 MCUboot Image 0（CLR 槽）上传。 |
+| `--clrfile <路径>` | — | CLR 镜像路径。使用 `--mcuboot` 时，通过 SMP 作为 MCUboot Image 0（CLR 槽）上传。 |
 | `--image <路径>` | — | 部署程序集镜像路径。使用 `--mcuboot` 时，通过 SMP 作为 MCUboot Image 1（部署槽）上传。 |
 | `--sign-key <路径>` | — | PEM 签名密钥路径。上传前使用 `imgtool` 签名镜像。 |
 | `--secondary-slot` | false | 仅用于开发。将镜像上传到副槽而非主槽。 |
