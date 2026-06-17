@@ -14,8 +14,8 @@ namespace nanoFramework.Tools.FirmwareFlasher
 {
     /// <summary>
     /// Manages MCUboot firmware update operations using the SMP serial transport (mcumgr protocol).
-    /// Handles standalone queries (list/confirm/test/erase) and the full upload lifecycle:
-    /// sign (if key provided) → upload → test/confirm → reset.
+    /// Handles standalone queries (list/erase) and the full upload lifecycle:
+    /// sign (if key provided) → upload → reset.
     /// </summary>
     public class McubootManager : IManager
     {
@@ -61,16 +61,6 @@ namespace nanoFramework.Tools.FirmwareFlasher
             if (_options.ListMcuImages)
             {
                 return await RunWithClientAsync(ListImagesAsync);
-            }
-
-            if (_options.ConfirmImage)
-            {
-                return await RunWithClientAsync(ConfirmImageStandaloneAsync);
-            }
-
-            if (_options.TestImage)
-            {
-                return await RunWithClientAsync(TestImageStandaloneAsync);
             }
 
             if (_options.EraseImage)
@@ -158,72 +148,6 @@ namespace nanoFramework.Tools.FirmwareFlasher
 
             OutputWriter.ForegroundColor = ConsoleColor.White;
             return ExitCodes.OK;
-        }
-
-        private async Task<ExitCodes> ConfirmImageStandaloneAsync(McumgrClient client)
-        {
-            byte[] hash = ParseImageHash();
-
-            try
-            {
-                await client.ConfirmImageAsync(hash);
-
-                if (_verbosity >= VerbosityLevel.Normal)
-                {
-                    OutputWriter.ForegroundColor = ConsoleColor.Green;
-                    OutputWriter.WriteLine("Image confirmed (permanent).");
-                    OutputWriter.ForegroundColor = ConsoleColor.White;
-                }
-
-                return ExitCodes.OK;
-            }
-            catch (McumgrProtocolException ex)
-            {
-                OutputWriter.ForegroundColor = ConsoleColor.Red;
-                OutputWriter.WriteLine($"Image confirm failed: {ex.Message}");
-                OutputWriter.ForegroundColor = ConsoleColor.White;
-                return ExitCodes.E10015;
-            }
-            catch (McumgrTimeoutException ex)
-            {
-                OutputWriter.ForegroundColor = ConsoleColor.Red;
-                OutputWriter.WriteLine($"Image confirm timed out: {ex.Message}");
-                OutputWriter.ForegroundColor = ConsoleColor.White;
-                return ExitCodes.E10007;
-            }
-        }
-
-        private async Task<ExitCodes> TestImageStandaloneAsync(McumgrClient client)
-        {
-            byte[] hash = ParseImageHash();
-
-            try
-            {
-                await client.TestImageAsync(hash);
-
-                if (_verbosity >= VerbosityLevel.Normal)
-                {
-                    OutputWriter.ForegroundColor = ConsoleColor.Green;
-                    OutputWriter.WriteLine("Image marked as pending (test boot).");
-                    OutputWriter.ForegroundColor = ConsoleColor.White;
-                }
-
-                return ExitCodes.OK;
-            }
-            catch (McumgrProtocolException ex)
-            {
-                OutputWriter.ForegroundColor = ConsoleColor.Red;
-                OutputWriter.WriteLine($"Image test failed: {ex.Message}");
-                OutputWriter.ForegroundColor = ConsoleColor.White;
-                return ExitCodes.E10016;
-            }
-            catch (McumgrTimeoutException ex)
-            {
-                OutputWriter.ForegroundColor = ConsoleColor.Red;
-                OutputWriter.WriteLine($"Image test timed out: {ex.Message}");
-                OutputWriter.ForegroundColor = ConsoleColor.White;
-                return ExitCodes.E10007;
-            }
         }
 
         private async Task<ExitCodes> EraseImageStandaloneAsync(McumgrClient client)
@@ -503,35 +427,6 @@ namespace nanoFramework.Tools.FirmwareFlasher
             if (result == ExitCodes.OK)
             {
                 imagePath = signedPath;
-            }
-
-            return result;
-        }
-
-        private byte[] ParseImageHash()
-        {
-            if (string.IsNullOrEmpty(_options.ImageHash))
-            {
-                return null;
-            }
-
-            string hex = _options.ImageHash
-                .Replace("-", "")
-                .Replace(":", "")
-                .Replace(" ", "");
-
-            if (hex.Length % 2 != 0)
-            {
-                OutputWriter.ForegroundColor = ConsoleColor.Yellow;
-                OutputWriter.WriteLine($"Warning: --image-hash '{_options.ImageHash}' has odd length; ignoring hash.");
-                OutputWriter.ForegroundColor = ConsoleColor.White;
-                return null;
-            }
-
-            byte[] result = new byte[hex.Length / 2];
-            for (int i = 0; i < result.Length; i++)
-            {
-                result[i] = Convert.ToByte(hex.Substring(i * 2, 2), 16);
             }
 
             return result;

@@ -489,13 +489,6 @@ namespace nanoFramework.Tools.FirmwareFlasher
         public string SigningKeyPath { get; set; }
 
         [Option(
-            "mcuboot-confirm",
-            Required = false,
-            Default = false,
-            HelpText = "Permanently confirm the uploaded MCUboot image after uploading. If not specified the image is marked as pending (test boot only).")]
-        public bool McubootConfirm { get; set; }
-
-        [Option(
             "mcuboot-slot-size",
             Required = false,
             Default = null,
@@ -538,32 +531,11 @@ namespace nanoFramework.Tools.FirmwareFlasher
         public bool ListMcuImages { get; set; }
 
         [Option(
-            "confirm-image",
-            Required = false,
-            Default = false,
-            HelpText = "Confirm the pending image (mark it permanent) via SMP without uploading. Optionally specify --image-hash to target a specific image.")]
-        public bool ConfirmImage { get; set; }
-
-        [Option(
-            "test-image",
-            Required = false,
-            Default = false,
-            HelpText = "Mark the pending image for a test boot via SMP without uploading. Optionally specify --image-hash to target a specific image.")]
-        public bool TestImage { get; set; }
-
-        [Option(
             "erase-image",
             Required = false,
             Default = false,
             HelpText = "Erase the MCUboot secondary slot via SMP without uploading. Requires --serialport.")]
         public bool EraseImage { get; set; }
-
-        [Option(
-            "image-hash",
-            Required = false,
-            Default = null,
-            HelpText = "Hex-encoded image hash used with --confirm-image or --test-image to identify the target image.")]
-        public string ImageHash { get; set; }
 
         [Option(
             "secondary-slot",

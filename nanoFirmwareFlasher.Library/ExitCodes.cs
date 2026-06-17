@@ -427,18 +427,6 @@ namespace nanoFramework.Tools.FirmwareFlasher
         E10014 = 10014,
 
         /// <summary>
-        /// SMP image confirm failed.
-        /// </summary>
-        [Display(Name = "SMP image confirm failed.")]
-        E10015 = 10015,
-
-        /// <summary>
-        /// SMP image test (pending) failed.
-        /// </summary>
-        [Display(Name = "SMP image test failed.")]
-        E10016 = 10016,
-
-        /// <summary>
         /// SMP image erase failed.
         /// </summary>
         [Display(Name = "SMP image erase failed.")]

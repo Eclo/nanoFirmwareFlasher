@@ -238,61 +238,6 @@ namespace nanoFramework.Tools.FirmwareFlasher.Mcuboot
         }
 
         /// <summary>
-        /// Sets an image as pending (test mode): it will be booted once on next reset.
-        /// </summary>
-        /// <param name="hash">Image hash to test, or null to use the first slot-1 image.</param>
-        public Task TestImageAsync(byte[] hash, CancellationToken ct = default)
-        {
-            ct.ThrowIfCancellationRequested();
-
-            try
-            {
-                SetImageState(hash, confirm: false, ct);
-
-                return Task.CompletedTask;
-            }
-            catch (Exception ex)
-            {
-                return Task.FromException(ex);
-            }
-        }
-
-        /// <summary>
-        /// Permanently confirms an image.
-        /// </summary>
-        /// <param name="hash">Image hash to confirm, or null to confirm the currently running image.</param>
-        public Task ConfirmImageAsync(byte[] hash, CancellationToken ct = default)
-        {
-            ct.ThrowIfCancellationRequested();
-
-            try
-            {
-                SetImageState(hash, confirm: true, ct);
-
-                return Task.CompletedTask;
-            }
-            catch (Exception ex)
-            {
-                return Task.FromException(ex);
-            }
-        }
-
-        private void SetImageState(byte[] hash, bool confirm, CancellationToken ct)
-        {
-            byte[] payload = EncodeImageStateWrite(hash, confirm);
-
-            SendCommand(SmpOpCode.Write, SmpGroup.Image, (byte)ImageCommandId.State, payload, ct);
-            byte[] rsp = ReceiveFrame(ct).Payload;
-
-            SmpReturnCode rc = DecodeRc(rsp);
-
-            if (rc != SmpReturnCode.Ok)
-            {
-                throw new McumgrProtocolException($"Image state command failed: rc={rc}", (int)rc);
-            }
-        }
-
-        /// <summary>
         /// Erases the secondary (upgrade) image slot.
         /// </summary>
         public Task EraseImageAsync(CancellationToken ct = default)
@@ -557,31 +502,6 @@ namespace nanoFramework.Tools.FirmwareFlasher.Mcuboot
             w.WriteStartMap(0);
             w.WriteEndMap();
 
-            return w.Encode();
-        }
-
-        /// <summary>
-        /// Encodes the CBOR payload for an Image State write (test or confirm).
-        /// Matches newtmgr's ImageStateWriteReq: both "hash" (when non-null) and "confirm"
-        /// are always encoded — neither field uses omitempty in the reference implementation.
-        /// </summary>
-        internal static byte[] EncodeImageStateWrite(byte[] hash, bool confirm)
-        {
-            var w = new CborWriter();
-            bool hasHash = hash != null && hash.Length > 0;
-
-            w.WriteStartMap(hasHash ? 2 : 1);
-
-            if (hasHash)
-            {
-                w.WriteTextString("hash");
-                w.WriteByteString(hash);
-            }
-
-            w.WriteTextString("confirm");
-            w.WriteBoolean(confirm);
-
-            w.WriteEndMap();
             return w.Encode();
         }
 
