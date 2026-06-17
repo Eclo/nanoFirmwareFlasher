@@ -404,42 +404,6 @@ namespace nanoFramework.Tools.FirmwareFlasher
                 return ExitCodes.E10007;
             }
 
-            if (_options.SecondarySlot)
-            {
-                // Image was written directly into the secondary slot (direct-XIP / overwrite-only
-                // mode). MCUboot will execute it from there without a swap, so test/confirm must
-                // NOT be issued — the pending-swap flag either has no effect or would trigger an
-                // unwanted swap back to the primary slot.
-            }
-            else if (_options.McubootConfirm)
-            {
-                try
-                {
-                    await client.ConfirmImageAsync(null);
-                }
-                catch (McumgrProtocolException ex)
-                {
-                    OutputWriter.ForegroundColor = ConsoleColor.Red;
-                    OutputWriter.WriteLine($"Image confirm failed: {ex.Message}");
-                    OutputWriter.ForegroundColor = ConsoleColor.White;
-                    return ExitCodes.E10015;
-                }
-            }
-            else
-            {
-                try
-                {
-                    await client.TestImageAsync(null);
-                }
-                catch (McumgrProtocolException ex)
-                {
-                    OutputWriter.ForegroundColor = ConsoleColor.Red;
-                    OutputWriter.WriteLine($"Image test failed: {ex.Message}");
-                    OutputWriter.ForegroundColor = ConsoleColor.White;
-                    return ExitCodes.E10016;
-                }
-            }
-
             if (_verbosity >= VerbosityLevel.Normal)
             {
                 OutputWriter.ForegroundColor = ConsoleColor.White;
@@ -585,30 +549,28 @@ namespace nanoFramework.Tools.FirmwareFlasher
 
         private int GetImageIndex(Options options)
         {
-            int tentativeIndex = 0;
+            // Direct-image id carried in the SMP upload "image" field. Must match the
+            // mapping in flash_area_id_from_direct_image() (MCUboot/common/flash_map_extend.c):
+            //   CLR        (Image 0): primary = 0, secondary = 2
+            //   deployment (Image 1): primary = 1, secondary = 3
+            int directImageId;
 
             if (options.ClrFile != null)
             {
                 // MCUboot Image 0 is for the CLR firmware
-                tentativeIndex = 0;
+                directImageId = options.SecondarySlot ? 2 : 0;
             }
             else if (options.DeploymentImage != null)
             {
                 // MCUboot Image 1 is for the deployment image
-                tentativeIndex = 1;
+                directImageId = options.SecondarySlot ? 3 : 1;
             }
             else
             {
                 throw new InvalidOperationException("No image specified in options.");
             }
 
-            if (options.SecondarySlot)
-            {
-                // use the secondaty slot
-                tentativeIndex++;
-            }
-
-            return tentativeIndex;
+            return directImageId;
         }
     }
 }
