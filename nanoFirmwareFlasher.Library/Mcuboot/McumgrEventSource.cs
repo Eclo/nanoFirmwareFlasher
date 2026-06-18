@@ -43,6 +43,7 @@ namespace nanoFramework.Tools.FirmwareFlasher.Mcuboot
         {
             (SmpGroup.Os, (byte)OsCommandId.Echo) => "Echo",
             (SmpGroup.Os, (byte)OsCommandId.Reset) => "Reset",
+            (SmpGroup.Os, (byte)OsCommandId.McumgrParameters) => "McumgrParameters",
             (SmpGroup.Image, (byte)ImageCommandId.State) => "State",
             (SmpGroup.Image, (byte)ImageCommandId.Upload) => "Upload",
             (SmpGroup.Image, (byte)ImageCommandId.Erase) => "Erase",

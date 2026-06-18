@@ -10,5 +10,7 @@ namespace nanoFramework.Tools.FirmwareFlasher.Mcuboot
         Echo = 0,
         /// <summary>Resets (reboots) the device.</summary>
         Reset = 5,
+        /// <summary>Reports the device's MCUmgr transport buffer size and count, used to negotiate the upload chunk size.</summary>
+        McumgrParameters = 6,
     }
 }

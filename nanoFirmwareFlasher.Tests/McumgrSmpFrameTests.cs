@@ -327,12 +327,11 @@ namespace nanoFirmwareFlasher.Tests
         [TestMethod]
         public void EncodeDecodeFrame_PayloadRequiringTwoFragments_SplitsAndReassemblesCorrectly()
         {
-            // raw = 2 (len) + 8 (header) + payload + 2 (CRC)
-            // base64 of 93 raw bytes = 124 chars (exactly fits 1 line)
-            // so payload.Length = 93 - 12 = 81 → still 1 fragment
-            // payload.Length = 85 → raw = 97 bytes → base64 = 132 chars → 2 fragments
-            var header  = new SmpHeader(SmpOpCode.Write, SmpGroup.Image, 0, (byte)ImageCommandId.Upload, 85);
-            byte[] payload = Enumerable.Range(0, 85).Select(i => (byte)(i & 0xFF)).ToArray();
+            // A single boot_serial line carries at most 508 base64 chars = 381 raw bytes.
+            // raw = 2 (len) + 8 (header) + payload + 2 (CRC), so a payload <= 369 stays on one
+            // line. payload.Length = 400 → raw = 412 bytes → base64 = 552 chars → 2 fragments.
+            var header  = new SmpHeader(SmpOpCode.Write, SmpGroup.Image, 0, (byte)ImageCommandId.Upload, 400);
+            byte[] payload = Enumerable.Range(0, 400).Select(i => (byte)(i & 0xFF)).ToArray();
 
             byte[] wireBytes = new McumgrSmpFrame(header, payload).ToWireBytes();
 

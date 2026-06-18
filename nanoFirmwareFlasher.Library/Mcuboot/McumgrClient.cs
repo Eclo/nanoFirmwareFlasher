@@ -16,9 +16,28 @@ namespace nanoFramework.Tools.FirmwareFlasher.Mcuboot
     /// </summary>
     public class McumgrClient : IDisposable
     {
+        /// <summary>
+        /// Default upload chunk size, in bytes, used until the device's MCUmgr buffer size is
+        /// negotiated via <see cref="GetParametersAsync"/>. Derived from the boot_serial single-line
+        /// budget (see the <c>chunkSize</c> constructor parameter) and flash-write aligned.
+        /// </summary>
+        internal const int DefaultChunkSize = 320;
+
+        /// <summary>Serial framing bytes outside the SMP header: 2-byte length prefix + 2-byte CRC.</summary>
+        private const int SmpFramingOverhead = 4;
+
+        /// <summary>
+        /// Worst-case CBOR map overhead for the first upload chunk: the "image", "off", "len" and
+        /// "data" keys plus their CBOR type/length prefixes.
+        /// </summary>
+        private const int FirstChunkCborOverhead = 33;
+
+        /// <summary>Flash-write alignment applied to the data byte-string in each chunk.</summary>
+        private const int ChunkAlignment = 4;
+
         private readonly SerialPort _port;
         private readonly int _timeoutMs;
-        private readonly int _chunkSize;
+        private int _chunkSize;
         private byte _seq;
         private bool _disposed;
 
@@ -30,6 +49,13 @@ namespace nanoFramework.Tools.FirmwareFlasher.Mcuboot
 
         /// <summary>Verbosity level for progress output.</summary>
         public VerbosityLevel Verbosity { get; set; }
+
+        /// <summary>
+        /// Current upload chunk size, in bytes. Starts at the value passed to the constructor
+        /// (default <see cref="DefaultChunkSize"/>) and is adjusted to the device's reported
+        /// buffer size when <see cref="GetParametersAsync"/> succeeds.
+        /// </summary>
+        public int ChunkSize => _chunkSize;
 
         /// <summary>
         /// Creates a new <see cref="McumgrClient"/> for the given serial port.
@@ -51,7 +77,7 @@ namespace nanoFramework.Tools.FirmwareFlasher.Mcuboot
             string portName,
             int baudRate = 921_600,
             int timeoutMs = 20_000,
-            int chunkSize = 320,
+            int chunkSize = DefaultChunkSize,
             VerbosityLevel verbosity = VerbosityLevel.Normal)
         {
             _port = new SerialPort(portName, baudRate, Parity.None, 8, StopBits.One)
@@ -114,6 +140,71 @@ namespace nanoFramework.Tools.FirmwareFlasher.Mcuboot
             byte[] rsp = ReceiveFrame(ct).Payload;
 
             return DecodeStringField(rsp, "r");
+        }
+
+        /// <summary>
+        /// Queries the device's MCUmgr transport parameters and, on a successful response, adjusts
+        /// the upload <see cref="ChunkSize"/> so it matches the device's buffer size instead of the
+        /// conservative default. Should be called right after <see cref="Open"/>.
+        /// </summary>
+        /// <param name="ct">Cancellation token.</param>
+        /// <returns>
+        /// The decoded <see cref="McumgrParameters"/>. <see cref="McumgrParameters.BufSize"/> is 0
+        /// when the device responded without a usable value (the chunk size is then left unchanged).
+        /// </returns>
+        /// <remarks>
+        /// MCUboot serial recovery does not implement this command, so callers should treat a
+        /// <see cref="McumgrTimeoutException"/> as "unsupported" and keep the default chunk size.
+        /// </remarks>
+        public Task<McumgrParameters> GetParametersAsync(CancellationToken ct = default)
+        {
+            ct.ThrowIfCancellationRequested();
+
+            try
+            {
+                return Task.FromResult(GetParametersCore(ct));
+            }
+            catch (Exception ex)
+            {
+                return Task.FromException<McumgrParameters>(ex);
+            }
+        }
+
+        private McumgrParameters GetParametersCore(CancellationToken ct)
+        {
+            byte[] payload = EncodeEmptyMap();
+
+            SendCommand(SmpOpCode.Read, SmpGroup.Os, (byte)OsCommandId.McumgrParameters, payload, ct);
+            byte[] rsp = ReceiveFrame(ct).Payload;
+
+            McumgrParameters parameters = DecodeParameters(rsp);
+
+            if (parameters.BufSize > 0)
+            {
+                // size the chunk to the device's buffer rather than the worst-case default
+                _chunkSize = CalculateChunkSize(parameters.BufSize);
+            }
+
+            return parameters;
+        }
+
+        /// <summary>
+        /// Computes the largest flash-write-aligned data chunk that fits within a device transport
+        /// buffer of <paramref name="bufSize"/> bytes, accounting for the SMP header, the serial
+        /// framing and the first chunk's CBOR map overhead.
+        /// </summary>
+        internal static int CalculateChunkSize(int bufSize)
+        {
+            int dataRoom = bufSize - SmpHeader.WireLength - SmpFramingOverhead - FirstChunkCborOverhead;
+
+            if (dataRoom < ChunkAlignment)
+            {
+                // device buffer is implausibly small; fall back to a single aligned unit
+                return ChunkAlignment;
+            }
+
+            // align down to the flash-write boundary
+            return (dataRoom / ChunkAlignment) * ChunkAlignment;
         }
 
         /// <summary>
@@ -741,6 +832,48 @@ namespace nanoFramework.Tools.FirmwareFlasher.Mcuboot
             }
 
             return null;
+        }
+
+        internal static McumgrParameters DecodeParameters(byte[] payload)
+        {
+            var parameters = new McumgrParameters();
+
+            if (payload == null || payload.Length == 0)
+            {
+                return parameters;
+            }
+
+            try
+            {
+                var r = new CborReader(payload, CborConformanceMode.Lax);
+                r.ReadStartMap();
+
+                while (r.PeekState() != CborReaderState.EndMap)
+                {
+                    string key = r.ReadTextString();
+
+                    switch (key)
+                    {
+                        case "buf_size":
+                            parameters.BufSize = (int)r.ReadInt64();
+                            break;
+
+                        case "buf_count":
+                            parameters.BufCount = (int)r.ReadInt64();
+                            break;
+
+                        default:
+                            r.SkipValue();
+                            break;
+                    }
+                }
+            }
+            catch
+            {
+                // ignore parsing errors and return any successfully decoded values
+            }
+
+            return parameters;
         }
 
         internal static List<McumgrImageInfo> DecodeImageList(byte[] payload)

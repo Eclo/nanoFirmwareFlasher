@@ -72,7 +72,7 @@ namespace nanoFramework.Tools.FirmwareFlasher
         }
 
         /// <summary>
-        /// Opens an SMP client, runs an echo connectivity check, then calls <paramref name="operation"/>.
+        /// Opens an SMP client, negotiates the device's MCUmgr buffer size, then calls <paramref name="operation"/>.
         /// </summary>
         private async Task<ExitCodes> RunWithClientAsync(Func<McumgrClient, Task<ExitCodes>> operation)
         {
@@ -93,7 +93,36 @@ namespace nanoFramework.Tools.FirmwareFlasher
                     return ExitCodes.E10005;
                 }
 
+                await NegotiateTransportParametersAsync(client);
+
                 return await operation(client);
+            }
+        }
+
+        /// <summary>
+        /// Best-effort query of the device's MCUmgr parameters so uploads use a chunk size the
+        /// device can actually accept. MCUboot serial recovery does not implement this command;
+        /// in that case the timeout is swallowed and the conservative default chunk size is kept.
+        /// </summary>
+        private async Task NegotiateTransportParametersAsync(McumgrClient client)
+        {
+            try
+            {
+                McumgrParameters parameters = await client.GetParametersAsync();
+
+                if (_verbosity >= VerbosityLevel.Detailed && parameters.BufSize > 0)
+                {
+                    OutputWriter.ForegroundColor = ConsoleColor.White;
+                    OutputWriter.WriteLine($"Device MCUmgr buffers: size={parameters.BufSize}, count={parameters.BufCount}; upload chunk set to {client.ChunkSize} bytes.");
+                }
+            }
+            catch (McumgrTimeoutException)
+            {
+                // command unsupported (e.g. MCUboot serial recovery); keep the default chunk size
+            }
+            catch (McumgrProtocolException)
+            {
+                // device rejected the command; keep the default chunk size
             }
         }
 

@@ -481,6 +481,91 @@ namespace nanoFirmwareFlasher.Tests
             Assert.IsNull(result, "response without 'r' field must return null");
         }
 
+        [TestMethod]
+        public void OsParamsRequest_IsEmptyMap()
+        {
+            // The MCUmgr parameters request carries no fields.
+            byte[] cbor = McumgrClient.EncodeEmptyMap();
+
+            Assert.IsFalse(HasField(cbor, "buf_size"), "parameters request must be an empty map");
+            Assert.IsFalse(HasField(cbor, "buf_count"), "parameters request must be an empty map");
+        }
+
+        [TestMethod]
+        public void OsParamsResponse_BufSizeAndCount_Decoded()
+        {
+            // mirrors os_mgmt_params response: { "buf_size": 2475, "buf_count": 4 }
+            byte[] payload = EncodeParametersResponse(bufSize: 2475, bufCount: 4);
+
+            McumgrParameters parameters = McumgrClient.DecodeParameters(payload);
+
+            Assert.AreEqual(2475, parameters.BufSize, "buf_size field must be decoded");
+            Assert.AreEqual(4, parameters.BufCount, "buf_count field must be decoded");
+        }
+
+        [TestMethod]
+        public void OsParamsResponse_EmptyPayload_ReturnsZeroes()
+        {
+            // unsupported / no-response scenario must not throw and must leave BufSize == 0
+            McumgrParameters parameters = McumgrClient.DecodeParameters(Array.Empty<byte>());
+
+            Assert.AreEqual(0, parameters.BufSize, "empty parameters response must decode buf_size as 0");
+            Assert.AreEqual(0, parameters.BufCount, "empty parameters response must decode buf_count as 0");
+        }
+
+        [TestMethod]
+        public void OsParamsResponse_MissingFields_LeavesDefaults()
+        {
+            // a response carrying an unrelated field must not throw and must leave defaults
+            byte[] payload = EncodeSingleIntMap("rc", 0);
+
+            McumgrParameters parameters = McumgrClient.DecodeParameters(payload);
+
+            Assert.AreEqual(0, parameters.BufSize);
+            Assert.AreEqual(0, parameters.BufCount);
+        }
+
+        [TestMethod]
+        public void CalculateChunkSize_TypicalBuffer_FitsWithinDeviceBuffer()
+        {
+            // For a 512-byte buffer the chunk plus all SMP/CBOR/framing overhead must fit.
+            int chunk = McumgrClient.CalculateChunkSize(512);
+
+            // 512 - 8 (header) - 4 (length+CRC) - 33 (first-chunk CBOR overhead) = 467 → 464 aligned
+            Assert.AreEqual(464, chunk, "chunk size must be the aligned remainder of the device buffer");
+            Assert.IsTrue(chunk + 8 + 4 + 33 <= 512, "encoded first chunk must fit within the device buffer");
+        }
+
+        [TestMethod]
+        public void CalculateChunkSize_IsFlashWriteAligned()
+        {
+            // Chunk size must always be a multiple of the 4-byte flash-write alignment.
+            foreach (int bufSize in new[] { 256, 384, 512, 1024, 2475 })
+            {
+                int chunk = McumgrClient.CalculateChunkSize(bufSize);
+                Assert.AreEqual(0, chunk % 4, $"chunk size for buf_size {bufSize} must be 4-byte aligned");
+            }
+        }
+
+        [TestMethod]
+        public void CalculateChunkSize_LargerBuffer_ProducesLargerChunk()
+        {
+            // A bigger device buffer must allow a bigger chunk (so we adapt to the server).
+            int small = McumgrClient.CalculateChunkSize(256);
+            int large = McumgrClient.CalculateChunkSize(1024);
+
+            Assert.IsTrue(large > small, "a larger device buffer must yield a larger chunk size");
+        }
+
+        [TestMethod]
+        public void CalculateChunkSize_ImplausiblySmallBuffer_FallsBackToAlignment()
+        {
+            // A buffer too small to hold any overhead must not produce a negative/zero chunk.
+            int chunk = McumgrClient.CalculateChunkSize(8);
+
+            Assert.AreEqual(4, chunk, "an implausibly small buffer must fall back to a single aligned unit");
+        }
+
         // -----------------------------------------------------------------------
         // os_reset_response equivalents
         //
@@ -569,6 +654,20 @@ namespace nanoFirmwareFlasher.Tests
             w.WriteStartMap(2);
             w.WriteTextString("rc");  w.WriteInt64(status);
             w.WriteTextString("off"); w.WriteInt64(offset);
+            w.WriteEndMap();
+            return w.Encode();
+        }
+
+        /// <summary>
+        /// Encodes an MCUmgr parameters response: { "buf_size": bufSize, "buf_count": bufCount }
+        /// matching the format produced by Zephyr's os_mgmt MCUmgr Parameters handler.
+        /// </summary>
+        private static byte[] EncodeParametersResponse(long bufSize, long bufCount)
+        {
+            var w = new CborWriter();
+            w.WriteStartMap(2);
+            w.WriteTextString("buf_size");  w.WriteInt64(bufSize);
+            w.WriteTextString("buf_count"); w.WriteInt64(bufCount);
             w.WriteEndMap();
             return w.Encode();
         }
