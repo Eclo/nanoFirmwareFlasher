@@ -86,6 +86,37 @@ namespace nanoFramework.Tools.FirmwareFlasher.Mcuboot
         #region OS Group
 
         /// <summary>
+        /// Sends an echo command and returns the string echoed back by the device.
+        /// Used to verify SMP connectivity before starting a firmware update.
+        /// </summary>
+        /// <param name="text">Text to send; the device echoes it back in the "r" field.</param>
+        /// <param name="ct">Cancellation token.</param>
+        /// <returns>The string echoed back by the device, or <see langword="null"/> if the response contained no "r" field.</returns>
+        public Task<string> EchoAsync(string text, CancellationToken ct = default)
+        {
+            ct.ThrowIfCancellationRequested();
+
+            try
+            {
+                return Task.FromResult(EchoCore(text, ct));
+            }
+            catch (Exception ex)
+            {
+                return Task.FromException<string>(ex);
+            }
+        }
+
+        private string EchoCore(string text, CancellationToken ct)
+        {
+            byte[] payload = EncodeMap1("d", text);
+
+            SendCommand(SmpOpCode.Write, SmpGroup.Os, (byte)OsCommandId.Echo, payload, ct);
+            byte[] rsp = ReceiveFrame(ct).Payload;
+
+            return DecodeStringField(rsp, "r");
+        }
+
+        /// <summary>
         /// Sends a reset command. The device will reboot; no response is expected after reboot.
         /// </summary>
         public Task ResetAsync(CancellationToken ct = default)

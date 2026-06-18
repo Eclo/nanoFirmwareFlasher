@@ -445,6 +445,42 @@ namespace nanoFirmwareFlasher.Tests
             }
         }
 
+        [TestMethod]
+        public void OsEcho_RequestAndResponse_FullRoundTrip()
+        {
+            // Simulates the full echo flow: encode request → device echoes → decode response.
+            // The device copies the "d" value into "r" in its response (os_echo_response).
+            const string echoText = "TestString";
+
+            byte[] request = McumgrClient.EncodeMap1("d", echoText);
+            string sent = McumgrClient.DecodeStringField(request, "d");
+
+            // device response: { "r": sent }
+            byte[] response = McumgrClient.EncodeMap1("r", sent);
+            string echoed = McumgrClient.DecodeStringField(response, "r");
+
+            Assert.AreEqual(echoText, echoed, "echoed 'r' value must match the originally sent 'd' value");
+        }
+
+        [TestMethod]
+        public void OsEcho_RequestEncodesOnlyDField()
+        {
+            // The echo request must contain exactly the "d" key and nothing else.
+            byte[] cbor = McumgrClient.EncodeMap1("d", "hello");
+
+            Assert.IsTrue(HasField(cbor,  "d"), "echo request must have 'd' field");
+            Assert.IsFalse(HasField(cbor, "r"), "echo request must not have 'r' field");
+        }
+
+        [TestMethod]
+        public void OsEchoResponse_MissingRField_ReturnsNull()
+        {
+            // A response that has an unrelated field must not throw and must return null.
+            byte[] response = McumgrClient.EncodeMap1("rc", "0");
+            string result = McumgrClient.DecodeStringField(response, "r");
+            Assert.IsNull(result, "response without 'r' field must return null");
+        }
+
         // -----------------------------------------------------------------------
         // os_reset_response equivalents
         //
