@@ -24,6 +24,10 @@ namespace nanoFramework.Tools.FirmwareFlasher.Mcuboot
         private const uint McubootMagic = 0x96f3b83d;
         private const int HeaderBytesNeeded = 32;
 
+        // Sentinel values returned by FindImgtool() to indicate Python-module invocation.
+        private const string ImgtoolViaPython = "python";
+        private const string ImgtoolViaPython3 = "python3";
+
         private readonly string _signingKeyPath;
         private readonly int _slotSize;
         private readonly int _headerSize;
@@ -64,7 +68,56 @@ namespace nanoFramework.Tools.FirmwareFlasher.Mcuboot
         /// <param name="outputBinPath">Path for the signed output image.</param>
         /// <param name="version">Semantic version string (e.g., "1.12.0.45").</param>
         public ExitCodes SignImage(string inputBinPath, string outputBinPath, string version)
-            => throw new NotImplementedException();
+        {
+            if (inputBinPath is null)
+            {
+                throw new ArgumentNullException(nameof(inputBinPath));
+            }
+
+            if (outputBinPath is null)
+            {
+                throw new ArgumentNullException(nameof(outputBinPath));
+            }
+
+            if (version is null)
+            {
+                throw new ArgumentNullException(nameof(version));
+            }
+
+            RequireImgtool();
+
+            string imgtoolVersion = FormatImgtoolVersion(version);
+
+            string args = $"sign"
+                + $" --key \"{_signingKeyPath}\""
+                + $" --align {_writeAlignment}"
+                + $" --version {imgtoolVersion}"
+                + $" --header-size {_headerSize}"
+                + $" --pad-header"
+                + $" --slot-size {_slotSize}"
+                + $" \"{inputBinPath}\""
+                + $" \"{outputBinPath}\"";
+
+            var (exitCode, _, stderr) = RunImgtool(args);
+
+            if (exitCode != 0)
+            {
+                OutputWriter.ForegroundColor = ConsoleColor.Red;
+                OutputWriter.WriteLine($"** ERROR: imgtool sign failed (exit {exitCode}): {stderr}");
+                OutputWriter.ForegroundColor = ConsoleColor.White;
+
+                return ExitCodes.E10002;
+            }
+
+            if (Verbosity >= VerbosityLevel.Normal)
+            {
+                OutputWriter.ForegroundColor = ConsoleColor.Green;
+                OutputWriter.WriteLine($"Signed image written to '{outputBinPath}'.");
+                OutputWriter.ForegroundColor = ConsoleColor.White;
+            }
+
+            return ExitCodes.OK;
+        }
 
         /// <summary>
         /// Validates a signed image: checks MCUboot header magic, version, fit within slot.
@@ -123,7 +176,35 @@ namespace nanoFramework.Tools.FirmwareFlasher.Mcuboot
         /// </summary>
         /// <param name="outputKeyPath">Path for the generated PEM key file.</param>
         public ExitCodes GenerateSigningKey(string outputKeyPath)
-            => throw new NotImplementedException();
+        {
+            if (outputKeyPath is null)
+            {
+                throw new ArgumentNullException(nameof(outputKeyPath));
+            }
+
+            RequireImgtool();
+
+            string args = $"keygen --key \"{outputKeyPath}\" --type ecdsa-p256";
+            var (exitCode, _, stderr) = RunImgtool(args);
+
+            if (exitCode != 0)
+            {
+                OutputWriter.ForegroundColor = ConsoleColor.Red;
+                OutputWriter.WriteLine($"** ERROR: imgtool keygen failed (exit {exitCode}): {stderr}");
+                OutputWriter.ForegroundColor = ConsoleColor.White;
+
+                return ExitCodes.E10004;
+            }
+
+            if (Verbosity >= VerbosityLevel.Normal)
+            {
+                OutputWriter.ForegroundColor = ConsoleColor.Green;
+                OutputWriter.WriteLine($"Signing key written to '{outputKeyPath}'.");
+                OutputWriter.ForegroundColor = ConsoleColor.White;
+            }
+
+            return ExitCodes.OK;
+        }
 
         /// <summary>
         /// Extracts the public key from a signing key in C source format.
@@ -131,11 +212,75 @@ namespace nanoFramework.Tools.FirmwareFlasher.Mcuboot
         /// <param name="signingKeyPath">Path to the PEM signing key.</param>
         /// <param name="outputCSourcePath">Path for the generated C source file.</param>
         public ExitCodes ExtractPublicKey(string signingKeyPath, string outputCSourcePath)
-            => throw new NotImplementedException();
+        {
+            if (signingKeyPath is null)
+            {
+                throw new ArgumentNullException(nameof(signingKeyPath));
+            }
+
+            if (outputCSourcePath is null)
+            {
+                throw new ArgumentNullException(nameof(outputCSourcePath));
+            }
+
+            RequireImgtool();
+
+            string args = $"getpub --key \"{signingKeyPath}\" --lang c";
+            var (exitCode, stdout, stderr) = RunImgtool(args);
+
+            if (exitCode != 0)
+            {
+                OutputWriter.ForegroundColor = ConsoleColor.Red;
+                OutputWriter.WriteLine($"** ERROR: imgtool getpub failed (exit {exitCode}): {stderr}");
+                OutputWriter.ForegroundColor = ConsoleColor.White;
+
+                return ExitCodes.E10004;
+            }
+
+            File.WriteAllText(outputCSourcePath, stdout);
+
+            if (Verbosity >= VerbosityLevel.Normal)
+            {
+                OutputWriter.ForegroundColor = ConsoleColor.Green;
+                OutputWriter.WriteLine($"Public key C source written to '{outputCSourcePath}'.");
+                OutputWriter.ForegroundColor = ConsoleColor.White;
+            }
+
+            return ExitCodes.OK;
+        }
 
         /// <summary>
-        /// Locates imgtool - checks PATH, then python -m imgtool, then bundled location.
-        /// Returns null if not found (methods that need it throw <see cref="McubootImageException"/>).
+        /// Converts a dotted-quad version string to the format imgtool expects:
+        /// "major.minor.revision+build" (build number separated by '+').
+        /// </summary>
+        /// <param name="dotQuadVersion">Version string like "1.12.0.45".</param>
+        /// <returns>Version string like "1.12.0+45".</returns>
+        internal static string FormatImgtoolVersion(string dotQuadVersion)
+        {
+            // Replace all dots with '+', then restore the first two back to dots.
+            // "1.12.0.45" → "1+12+0+45" → "1.12.0+45"
+            var chars = dotQuadVersion.Replace('.', '+').ToCharArray();
+            int replaced = 0;
+
+            for (int i = 0; i < chars.Length && replaced < 2; i++)
+            {
+                if (chars[i] == '+')
+                {
+                    chars[i] = '.';
+                    replaced++;
+                }
+            }
+
+            return new string(chars);
+        }
+
+        /// <summary>
+        /// Locates imgtool. Returns:
+        ///   "imgtool"  — direct PATH executable
+        ///   "python"   — use 'python -m imgtool'
+        ///   "python3"  — use 'python3 -m imgtool'
+        ///   a full path — bundled imgtool.exe
+        ///   null       — not found
         /// </summary>
         internal static string FindImgtool()
         {
@@ -145,15 +290,15 @@ namespace nanoFramework.Tools.FirmwareFlasher.Mcuboot
                 return "imgtool";
             }
 
-            // 2. Python module
+            // 2. Python module (python / python3)
             if (TryRunProcess("python", "-m imgtool --version", out _))
             {
-                return null; // caller uses "python -m imgtool ..."
+                return ImgtoolViaPython;
             }
 
             if (TryRunProcess("python3", "-m imgtool --version", out _))
             {
-                return null;
+                return ImgtoolViaPython3;
             }
 
             // 3. Bundled alongside the assembly
@@ -167,16 +312,60 @@ namespace nanoFramework.Tools.FirmwareFlasher.Mcuboot
             return null;
         }
 
-        private string RequireImgtool()
+        private void RequireImgtool()
         {
             _imgtoolPath ??= FindImgtool();
 
             if (_imgtoolPath is null)
             {
-                throw new McubootImageException("imgtool not found. Install via 'pip install imgtool' or place imgtool.exe in <nanoff-dir>/tools/imgtool/.");
+                throw new McubootImageException(
+                    "imgtool not found. Install via 'pip install imgtool' or place imgtool.exe in <nanoff-dir>/tools/imgtool/.");
+            }
+        }
+
+        /// <summary>
+        /// Runs imgtool with the given sub-command arguments.
+        /// Handles both direct-executable and python-module invocation modes.
+        /// </summary>
+        private (int exitCode, string stdout, string stderr) RunImgtool(string arguments)
+        {
+            string executable;
+            string fullArguments;
+
+            if (_imgtoolPath == ImgtoolViaPython || _imgtoolPath == ImgtoolViaPython3)
+            {
+                executable = _imgtoolPath;
+                fullArguments = $"-m imgtool {arguments}";
+            }
+            else
+            {
+                executable = _imgtoolPath;
+                fullArguments = arguments;
             }
 
-            return _imgtoolPath;
+            try
+            {
+                using var proc = new Process();
+
+                proc.StartInfo = new ProcessStartInfo(executable, fullArguments)
+                {
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                };
+
+                proc.Start();
+                string stdout = proc.StandardOutput.ReadToEnd();
+                string stderr = proc.StandardError.ReadToEnd();
+                proc.WaitForExit(60000);
+
+                return (proc.ExitCode, stdout, stderr);
+            }
+            catch (Exception ex)
+            {
+                return (-1, string.Empty, ex.Message);
+            }
         }
 
         private static bool TryRunProcess(string executable, string arguments, out string stdout)
