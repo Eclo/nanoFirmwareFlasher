@@ -323,7 +323,7 @@ Raspberry Pi Pico 开发板（RP2040 和 RP2350）使用 UF2 大容量存储进�
 将 Raspberry Pi Pico（RP2040）的固件更新到最新可用的稳定版本。
 
 ```console
-nanoff --update --target RP_PICO_RP2040
+nanoff --update --target PICO_RP2040
 ```
 
 ### 更新 Raspberry Pi Pico 2 的固件
@@ -331,7 +331,7 @@ nanoff --update --target RP_PICO_RP2040
 将 Raspberry Pi Pico 2（RP2350）的固件更新到最新可用的预览版本。
 
 ```console
-nanoff --update --target RP_PICO_RP2350 --preview
+nanoff --update --target PICO2_RP2350 --preview
 ```
 
 ### 显示已连接的 Pico 设备详情
