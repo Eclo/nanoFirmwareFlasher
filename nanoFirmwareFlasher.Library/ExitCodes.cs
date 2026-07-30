@@ -450,6 +450,18 @@ namespace nanoFramework.Tools.FirmwareFlasher
         [Display(Name = "Image too large for MCUboot slot. Increase slot size or reduce image size.")]
         E10020 = 10020,
 
+        /// <summary>
+        /// SMP set image state failed.
+        /// </summary>
+        [Display(Name = "SMP set image state failed. The uploaded image was not marked for swap.")]
+        E10021 = 10021,
+
+        /// <summary>
+        /// Could not read the SHA-256 image hash from the signed image.
+        /// </summary>
+        [Display(Name = "Could not read the SHA-256 hash from the image. Is it a signed MCUboot image?")]
+        E10022 = 10022,
+
         ////////////////////////////////
         // Application general Errors //
         ////////////////////////////////

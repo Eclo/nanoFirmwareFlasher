@@ -24,6 +24,15 @@ namespace nanoFramework.Tools.FirmwareFlasher.Mcuboot
         private const uint McubootMagic = 0x96f3b83d;
         private const int HeaderBytesNeeded = 32;
 
+        // TLV area, which follows the payload at hdr_size + img_size:
+        //   info header: magic (uint16 LE), total length including the header (uint16 LE)
+        //   entries:     type (uint16 LE), length (uint16 LE), value
+        private const ushort TlvInfoMagic = 0x6907;          // unprotected TLV area
+        private const ushort TlvInfoMagicProtected = 0x6908; // protected TLV area
+        private const ushort TlvSha256 = 0x10;
+        private const int TlvHeaderSize = 4;
+        private const int Sha256Size = 32;
+
         // Sentinel values returned by FindImgtool() to indicate Python-module invocation.
         private const string ImgtoolViaPython = "python";
         private const string ImgtoolViaPython3 = "python3";
@@ -169,6 +178,90 @@ namespace nanoFramework.Tools.FirmwareFlasher.Mcuboot
             }
 
             return info;
+        }
+
+        /// <summary>
+        /// Reads the SHA-256 image hash out of a signed MCUboot image.
+        /// </summary>
+        /// <remarks>
+        /// This is the hash mcumgr identifies an image by, so it is what
+        /// <see cref="McumgrClient.SetImageStateAsync"/> needs to mark an uploaded image
+        /// pending. Reading it from the file avoids a round trip to query the device.
+        /// </remarks>
+        /// <param name="signedImageBytes">Complete signed image, header through TLV area.</param>
+        /// <param name="hash">The 32-byte hash, or <see langword="null"/> if it was not found.</param>
+        /// <returns><see langword="true"/> if a SHA-256 TLV was present.</returns>
+        public static bool TryGetImageHash(byte[] signedImageBytes, out byte[] hash)
+        {
+            hash = null;
+
+            if (signedImageBytes is null || signedImageBytes.Length < HeaderBytesNeeded)
+            {
+                return false;
+            }
+
+            if (BitConverter.ToUInt32(signedImageBytes, 0) != McubootMagic)
+            {
+                return false;
+            }
+
+            ushort headerSize = BitConverter.ToUInt16(signedImageBytes, 8);
+            uint imageSize = BitConverter.ToUInt32(signedImageBytes, 12);
+
+            long offset = (long)headerSize + imageSize;
+
+            // Walk the TLV areas: a protected area, if present, precedes the unprotected one.
+            while (offset + TlvHeaderSize <= signedImageBytes.Length)
+            {
+                ushort infoMagic = BitConverter.ToUInt16(signedImageBytes, (int)offset);
+                ushort infoLength = BitConverter.ToUInt16(signedImageBytes, (int)offset + 2);
+
+                if (infoMagic != TlvInfoMagic && infoMagic != TlvInfoMagicProtected)
+                {
+                    return false;
+                }
+
+                if (infoLength < TlvHeaderSize || offset + infoLength > signedImageBytes.Length)
+                {
+                    return false;
+                }
+
+                long areaEnd = offset + infoLength;
+                long entry = offset + TlvHeaderSize;
+
+                while (entry + TlvHeaderSize <= areaEnd)
+                {
+                    ushort type = BitConverter.ToUInt16(signedImageBytes, (int)entry);
+                    ushort length = BitConverter.ToUInt16(signedImageBytes, (int)entry + 2);
+                    long value = entry + TlvHeaderSize;
+
+                    if (value + length > areaEnd)
+                    {
+                        return false;
+                    }
+
+                    if (type == TlvSha256 && length == Sha256Size)
+                    {
+                        hash = new byte[Sha256Size];
+                        Array.Copy(signedImageBytes, value, hash, 0, Sha256Size);
+
+                        return true;
+                    }
+
+                    entry = value + length;
+                }
+
+                // The hash lives in the unprotected area, so only a protected area is worth
+                // stepping over; anything else means we are done.
+                if (infoMagic != TlvInfoMagicProtected)
+                {
+                    return false;
+                }
+
+                offset = areaEnd;
+            }
+
+            return false;
         }
 
         /// <summary>

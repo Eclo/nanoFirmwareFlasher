@@ -636,6 +636,70 @@ namespace nanoFirmwareFlasher.Tests
             Assert.AreEqual((uint)slot, imageVal, "image field on subsequent chunk must carry the correct slot number");
         }
 
+        [TestMethod]
+        public void EncodeImageState_WithHash_HasHashAndConfirmFields()
+        {
+            byte[] hash = new byte[32];
+            for (int i = 0; i < 32; i++) hash[i] = (byte)(i * 7 + 3);
+
+            byte[] cbor = McumgrClient.EncodeImageState(hash, confirm: false);
+
+            var r = new CborReader(cbor, CborConformanceMode.Lax);
+            int? count = r.ReadStartMap();
+            Assert.AreEqual(2, count, "image state write with a hash must declare 2 fields");
+
+            var fields = new Dictionary<string, object>();
+            while (r.PeekState() != CborReaderState.EndMap)
+            {
+                string key = r.ReadTextString();
+                switch (key)
+                {
+                    case "hash":    fields["hash"]    = r.ReadByteString(); break;
+                    case "confirm": fields["confirm"] = r.ReadBoolean(); break;
+                    default:        r.SkipValue(); break;
+                }
+            }
+            r.ReadEndMap();
+
+            Assert.IsTrue(fields.ContainsKey("hash"), "must have 'hash' field");
+            Assert.IsTrue(fields.ContainsKey("confirm"), "must have 'confirm' field");
+
+            CollectionAssert.AreEqual(hash, (byte[])fields["hash"]);
+            Assert.AreEqual(false, (bool)fields["confirm"]);
+        }
+
+        [TestMethod]
+        public void EncodeImageState_Confirm_SetsConfirmTrue()
+        {
+            byte[] cbor = McumgrClient.EncodeImageState(new byte[32], confirm: true);
+
+            var r = new CborReader(cbor, CborConformanceMode.Lax);
+            r.ReadStartMap();
+            bool? confirm = null;
+            while (r.PeekState() != CborReaderState.EndMap)
+            {
+                string key = r.ReadTextString();
+                if (key == "confirm") confirm = r.ReadBoolean();
+                else r.SkipValue();
+            }
+            r.ReadEndMap();
+
+            Assert.AreEqual(true, confirm);
+        }
+
+        [TestMethod]
+        public void EncodeImageState_WithoutHash_OmitsHashField()
+        {
+            // single-image devices accept a hash-less request and fall back to image 0
+            byte[] cbor = McumgrClient.EncodeImageState(null, confirm: false);
+
+            var r = new CborReader(cbor, CborConformanceMode.Lax);
+            int? count = r.ReadStartMap();
+            Assert.AreEqual(1, count, "image state write without a hash must declare 1 field");
+
+            Assert.AreEqual("confirm", r.ReadTextString());
+        }
+
         private static byte[] EncodeSingleIntMap(string key, long value)
         {
             var w = new CborWriter();

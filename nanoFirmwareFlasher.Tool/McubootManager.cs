@@ -357,6 +357,18 @@ namespace nanoFramework.Tools.FirmwareFlasher
                 return ExitCodes.E10007;
             }
 
+            // An image landing in a secondary slot carries no pending marker in its trailer.
+            // Need to mark it explicitly.
+            if (_options.SecondarySlot)
+            {
+                ExitCodes stateResult = await MarkImageForSwapAsync(client, imageBytes);
+
+                if (stateResult != ExitCodes.OK)
+                {
+                    return stateResult;
+                }
+            }
+
             if (_verbosity >= VerbosityLevel.Normal)
             {
                 OutputWriter.ForegroundColor = ConsoleColor.White;
@@ -373,6 +385,67 @@ namespace nanoFramework.Tools.FirmwareFlasher
             }
 
             if (_verbosity >= VerbosityLevel.Normal)
+            {
+                OutputWriter.ForegroundColor = ConsoleColor.Green;
+                OutputWriter.WriteLine("OK");
+                OutputWriter.ForegroundColor = ConsoleColor.White;
+            }
+
+            return ExitCodes.OK;
+        }
+
+        /// <summary>
+        /// Marks a freshly uploaded secondary-slot image as pending, so MCUboot swaps it in on the
+        /// next reset. Without this the image sits in the slot with no trailer marker and MCUboot
+        /// reports swap type "none".
+        /// </summary>
+        private async Task<ExitCodes> MarkImageForSwapAsync(McumgrClient client, byte[] imageBytes)
+        {
+            bool normal = _verbosity >= VerbosityLevel.Normal;
+            const string prefix = "Marking image as pending...";
+
+            if (!McubootImageManager.TryGetImageHash(imageBytes, out byte[] hash))
+            {
+                OutputWriter.ForegroundColor = ConsoleColor.Red;
+                OutputWriter.WriteLine(
+                    "Could not read the SHA-256 hash from the image, so it cannot be marked for swap. "
+                    + "Only signed MCUboot images can be placed in a secondary slot.");
+                OutputWriter.ForegroundColor = ConsoleColor.White;
+
+                return ExitCodes.E10022;
+            }
+
+            if (normal)
+            {
+                OutputWriter.ForegroundColor = ConsoleColor.White;
+                OutputWriter.Write(prefix);
+            }
+
+            try
+            {
+                // always "test", never "confirm": making the swap permanent here would put the new
+                // image beyond reach of a rollback before it has booted even once. Confirmation is
+                // nanoCLR's job, once its startup health checks have passed.
+                await client.SetImageStateAsync(hash, confirm: false, default);
+            }
+            catch (McumgrProtocolException ex)
+            {
+                OutputWriter.ForegroundColor = ConsoleColor.Red;
+                OutputWriter.WriteLine($"\r{prefix}FAILED: {ex.Message}");
+                OutputWriter.ForegroundColor = ConsoleColor.White;
+
+                return ExitCodes.E10021;
+            }
+            catch (McumgrTimeoutException ex)
+            {
+                OutputWriter.ForegroundColor = ConsoleColor.Red;
+                OutputWriter.WriteLine($"\r{prefix}TIMED OUT: {ex.Message}");
+                OutputWriter.ForegroundColor = ConsoleColor.White;
+
+                return ExitCodes.E10007;
+            }
+
+            if (normal)
             {
                 OutputWriter.ForegroundColor = ConsoleColor.Green;
                 OutputWriter.WriteLine("OK");

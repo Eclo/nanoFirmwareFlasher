@@ -313,5 +313,147 @@ namespace nanoFirmwareFlasher.Tests
 
             return path;
         }
+
+        #region TryGetImageHash
+
+        [TestMethod]
+        public void TryGetImageHash_UnprotectedTlvArea_ReturnsSha256()
+        {
+            byte[] expected = new byte[32];
+            for (int i = 0; i < 32; i++) expected[i] = (byte)(i + 1);
+
+            byte[] image = BuildSignedImage(
+                payloadSize: 64,
+                unprotectedTlvs: [(TlvSha256, expected), (TlvKeyHash, new byte[32])]);
+
+            Assert.IsTrue(McubootImageManager.TryGetImageHash(image, out byte[] hash));
+            CollectionAssert.AreEqual(expected, hash);
+        }
+
+        [TestMethod]
+        public void TryGetImageHash_SkipsProtectedTlvArea()
+        {
+            byte[] expected = new byte[32];
+            for (int i = 0; i < 32; i++) expected[i] = (byte)(0xF0 - i);
+
+            // a protected area precedes the unprotected one; the hash lives in the latter
+            byte[] image = BuildSignedImage(
+                payloadSize: 32,
+                unprotectedTlvs: [(TlvSha256, expected)],
+                protectedTlvs: [(TlvDependency, new byte[16])]);
+
+            Assert.IsTrue(McubootImageManager.TryGetImageHash(image, out byte[] hash));
+            CollectionAssert.AreEqual(expected, hash);
+        }
+
+        [TestMethod]
+        public void TryGetImageHash_NoSha256Tlv_ReturnsFalse()
+        {
+            byte[] image = BuildSignedImage(
+                payloadSize: 16,
+                unprotectedTlvs: [(TlvKeyHash, new byte[32])]);
+
+            Assert.IsFalse(McubootImageManager.TryGetImageHash(image, out byte[] hash));
+            Assert.IsNull(hash);
+        }
+
+        [TestMethod]
+        public void TryGetImageHash_UnsignedImage_ReturnsFalse()
+        {
+            // a raw binary has no MCUboot header, so the vector table is at offset 0
+            byte[] raw = new byte[256];
+            raw[0] = 0x30; raw[1] = 0x04; raw[2] = 0x00; raw[3] = 0x20;
+
+            Assert.IsFalse(McubootImageManager.TryGetImageHash(raw, out byte[] hash));
+            Assert.IsNull(hash);
+        }
+
+        [TestMethod]
+        public void TryGetImageHash_TruncatedTlvArea_ReturnsFalseWithoutThrowing()
+        {
+            byte[] image = BuildSignedImage(
+                payloadSize: 16,
+                unprotectedTlvs: [(TlvSha256, new byte[32])]);
+
+            // lop off the tail so the declared TLV area runs past the end of the buffer
+            byte[] truncated = new byte[image.Length - 8];
+            Array.Copy(image, truncated, truncated.Length);
+
+            Assert.IsFalse(McubootImageManager.TryGetImageHash(truncated, out byte[] hash));
+            Assert.IsNull(hash);
+        }
+
+        [TestMethod]
+        public void TryGetImageHash_NullOrShortInput_ReturnsFalse()
+        {
+            Assert.IsFalse(McubootImageManager.TryGetImageHash(null, out byte[] h1));
+            Assert.IsNull(h1);
+
+            Assert.IsFalse(McubootImageManager.TryGetImageHash(new byte[4], out byte[] h2));
+            Assert.IsNull(h2);
+        }
+
+        private const ushort TlvSha256 = 0x10;
+        private const ushort TlvKeyHash = 0x01;
+        private const ushort TlvDependency = 0x40;
+        private const ushort TlvInfoMagic = 0x6907;
+        private const ushort TlvInfoMagicProtected = 0x6908;
+        private const ushort ImageHeaderSize = 0x200;
+
+        /// <summary>
+        /// Builds a synthetic signed image: 0x200-byte header, payload, then an optional
+        /// protected TLV area followed by the unprotected one, mirroring imgtool's output.
+        /// </summary>
+        private static byte[] BuildSignedImage(
+            int payloadSize,
+            (ushort Type, byte[] Value)[] unprotectedTlvs,
+            (ushort Type, byte[] Value)[] protectedTlvs = null)
+        {
+            byte[] protectedArea = protectedTlvs is null
+                ? []
+                : BuildTlvArea(TlvInfoMagicProtected, protectedTlvs);
+
+            byte[] unprotectedArea = BuildTlvArea(TlvInfoMagic, unprotectedTlvs);
+
+            byte[] image = new byte[ImageHeaderSize + payloadSize + protectedArea.Length + unprotectedArea.Length];
+
+            Buffer.BlockCopy(BitConverter.GetBytes(ValidMagic), 0, image, 0, 4);
+            Buffer.BlockCopy(BitConverter.GetBytes(ImageHeaderSize), 0, image, 8, 2);
+            Buffer.BlockCopy(BitConverter.GetBytes((ushort)protectedArea.Length), 0, image, 10, 2);
+            Buffer.BlockCopy(BitConverter.GetBytes((uint)payloadSize), 0, image, 12, 4);
+
+            int offset = ImageHeaderSize + payloadSize;
+            Buffer.BlockCopy(protectedArea, 0, image, offset, protectedArea.Length);
+            offset += protectedArea.Length;
+            Buffer.BlockCopy(unprotectedArea, 0, image, offset, unprotectedArea.Length);
+
+            return image;
+        }
+
+        private static byte[] BuildTlvArea(ushort infoMagic, (ushort Type, byte[] Value)[] tlvs)
+        {
+            int total = 4;
+            foreach ((ushort _, byte[] value) in tlvs)
+            {
+                total += 4 + value.Length;
+            }
+
+            byte[] area = new byte[total];
+            Buffer.BlockCopy(BitConverter.GetBytes(infoMagic), 0, area, 0, 2);
+            Buffer.BlockCopy(BitConverter.GetBytes((ushort)total), 0, area, 2, 2);
+
+            int offset = 4;
+            foreach ((ushort type, byte[] value) in tlvs)
+            {
+                Buffer.BlockCopy(BitConverter.GetBytes(type), 0, area, offset, 2);
+                Buffer.BlockCopy(BitConverter.GetBytes((ushort)value.Length), 0, area, offset + 2, 2);
+                Buffer.BlockCopy(value, 0, area, offset + 4, value.Length);
+                offset += 4 + value.Length;
+            }
+
+            return area;
+        }
+
+        #endregion
     }
 }

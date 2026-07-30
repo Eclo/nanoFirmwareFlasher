@@ -360,6 +360,72 @@ namespace nanoFramework.Tools.FirmwareFlasher.Mcuboot
         }
 
         /// <summary>
+        /// Marks an uploaded image as pending, so MCUboot swaps it in on the next reset.
+        /// </summary>
+        /// <remarks>
+        /// An image written to a secondary slot carries no pending marker in its trailer, so
+        /// without this call MCUboot reports swap type "none" and the upload is ignored. The
+        /// device must be built with the SMP image-state group enabled
+        /// (CONFIG_NF_MCUBOOT_SERIAL_IMG_STATE); otherwise it answers
+        /// <see cref="SmpReturnCode.NotSupported"/>.
+        /// </remarks>
+        /// <param name="hash">
+        /// SHA-256 of the image, as carried in its TLV area. Identifies which slot to mark, and
+        /// is required for multi-image devices. Use <see cref="McubootImageManager.TryGetImageHash"/>
+        /// to read it out of a signed image.
+        /// </param>
+        /// <param name="confirm">
+        /// <see langword="false"/> marks the image for test: it boots once and MCUboot reverts on
+        /// the next reset unless the firmware confirms it. <see langword="true"/> makes the swap
+        /// permanent immediately, before the image has booted even once.
+        /// <para>
+        /// The nanoFramework update flow always passes <see langword="false"/>: nanoCLR confirms
+        /// the image itself once its startup health checks pass, which is what preserves the
+        /// rollback path. The parameter exists because the SMP command carries the field.
+        /// </para>
+        /// </param>
+        /// <param name="ct">Cancellation token.</param>
+        public Task SetImageStateAsync(byte[] hash, bool confirm, CancellationToken ct = default)
+        {
+            ct.ThrowIfCancellationRequested();
+
+            try
+            {
+                SetImageStateCore(hash, confirm, ct);
+
+                return Task.CompletedTask;
+            }
+            catch (Exception ex)
+            {
+                return Task.FromException(ex);
+            }
+        }
+
+        private void SetImageStateCore(byte[] hash, bool confirm, CancellationToken ct)
+        {
+            byte[] payload = EncodeImageState(hash, confirm);
+
+            SendCommand(SmpOpCode.Write, SmpGroup.Image, (byte)ImageCommandId.State, payload, ct);
+            byte[] rsp = ReceiveFrame(ct).Payload;
+
+            SmpReturnCode rc = DecodeRc(rsp);
+
+            if (rc == SmpReturnCode.NotSupported)
+            {
+                // the bootloader was built without the image-state group, so bs_set() is not there
+                throw new McumgrProtocolException(
+                    "the device does not support the SMP image-state command. Rebuild the bootloader "
+                    + "with CONFIG_NF_MCUBOOT_SERIAL_IMG_STATE=y.",
+                    (int)rc);
+            }
+
+            if (rc != SmpReturnCode.Ok)
+            {
+                throw new McumgrProtocolException($"Setting image state failed: rc={rc}", (int)rc);
+            }
+        }
+
+        /// <summary>
         /// Erases the secondary (upgrade) image slot.
         /// </summary>
         public Task EraseImageAsync(CancellationToken ct = default)
@@ -633,6 +699,29 @@ namespace nanoFramework.Tools.FirmwareFlasher.Mcuboot
             w.WriteStartMap(1);
             w.WriteTextString(key);
             w.WriteTextString(value);
+            w.WriteEndMap();
+
+            return w.Encode();
+        }
+
+        internal static byte[] EncodeImageState(byte[] hash, bool confirm)
+        {
+            var w = new CborWriter();
+            bool includeHash = hash != null && hash.Length > 0;
+
+            // { "hash": <bstr>, "confirm": <bool> } — "hash" is omitted only for
+            // single-image devices, which fall back to image 0.
+            w.WriteStartMap(includeHash ? 2 : 1);
+
+            if (includeHash)
+            {
+                w.WriteTextString("hash");
+                w.WriteByteString(hash);
+            }
+
+            w.WriteTextString("confirm");
+            w.WriteBoolean(confirm);
+
             w.WriteEndMap();
 
             return w.Encode();
