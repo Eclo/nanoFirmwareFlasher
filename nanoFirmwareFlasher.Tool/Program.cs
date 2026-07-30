@@ -613,6 +613,8 @@ namespace nanoFramework.Tools.FirmwareFlasher
                 // JTAG related
                 if (
                     o.ListJtagDevices ||
+                    o.ListNativeStLinkDevices ||
+                    o.ListNativeSwdDevices ||
                     !string.IsNullOrEmpty(o.JtagDeviceId) ||
                     o.HexFile.Any() ||
                     o.BinFile.Any())
@@ -622,6 +624,7 @@ namespace nanoFramework.Tools.FirmwareFlasher
                 // DFU related
                 else if (
                     o.ListDevicesInDfuMode ||
+                    o.ListNativeDfuDevices ||
                     o.DfuUpdate ||
                     !string.IsNullOrEmpty(o.DfuDeviceId))
                 {
@@ -638,8 +641,7 @@ namespace nanoFramework.Tools.FirmwareFlasher
                     o.Platform = SupportedPlatform.ti_simplelink;
                 }
                 else if (
-                    o.InstallDfuDrivers
-                    || o.InstallJtagDrivers)
+                    o.InstallJtagDrivers)
                 {
                     o.Platform = SupportedPlatform.stm32;
                 }
