@@ -97,6 +97,21 @@ namespace nanoFramework.Tools.FirmwareFlasher.Mcuboot
             if (!_port.IsOpen)
             {
                 _port.Open();
+
+                // make sure the buffer is empty
+                _port.DiscardInBuffer();
+
+                // send a harmless priming sequence to flush any stray bytes on the device side
+                try
+                {
+                    byte[] priming = Encoding.ASCII.GetBytes("\r\n\r\n");
+                    _port.Write(priming, 0, priming.Length);
+                    Thread.Sleep(150);
+                }
+                catch (TimeoutException)
+                {
+                    // Best-effort priming: proceed even if the write itself timed out.
+                }
             }
         }
 
