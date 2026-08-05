@@ -546,21 +546,24 @@ namespace nanoFramework.Tools.FirmwareFlasher
 
         private int GetImageIndex(Options options)
         {
-            // Direct-image id carried in the SMP upload "image" field. Must match the
-            // mapping in flash_area_id_from_direct_image() (MCUboot/common/flash_map_extend.c):
-            //   CLR        (Image 0): primary = 0, secondary = 2
-            //   deployment (Image 1): primary = 1, secondary = 3
+            // Direct-image id carried in the SMP upload "image" field. The numbering is fixed
+            // by mcuboot core (bs_slot_info() advertises upload_image_id = image_index * 2 +
+            // slot + 1 for every (image, slot) pair), not something the port or this tool gets
+            // to choose - must match the mapping in flash_area_id_from_direct_image()
+            // (MCUboot/common/flash_map_extend.c):
+            //   CLR        (Image 0): primary = 1, secondary = 2
+            //   deployment (Image 1): primary = 3, secondary = 4
             int directImageId;
 
             if (options.ClrFile != null)
             {
                 // MCUboot Image 0 is for the CLR image
-                directImageId = options.SecondarySlot ? 2 : 0;
+                directImageId = options.SecondarySlot ? 2 : 1;
             }
             else if (options.DeploymentImage != null)
             {
                 // MCUboot Image 1 is for the deployment image
-                directImageId = options.SecondarySlot ? 3 : 1;
+                directImageId = options.SecondarySlot ? 4 : 3;
             }
             else
             {
