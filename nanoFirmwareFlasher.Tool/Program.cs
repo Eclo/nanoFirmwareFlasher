@@ -140,7 +140,7 @@ namespace nanoFramework.Tools.FirmwareFlasher
                     JsonNode responseContent = JsonSerializer.Deserialize<JsonNode>(response.Content.ReadAsStringAsync().Result, options);
                     string tagName = responseContent["tag_name"].ToString();
 
-                    latestVersion = Version.Parse(tagName.Substring(1));
+                    latestVersion = Version.Parse(tagName.Substring(1).Split('+')[0].Replace("-preview.", ""));
                 }
 
                 if (latestVersion > currentVersion)
