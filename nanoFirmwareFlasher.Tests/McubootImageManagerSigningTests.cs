@@ -1,4 +1,4 @@
-// Licensed to the .NET Foundation under one or more agreements.
+﻿// Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System;
@@ -72,24 +72,21 @@ namespace nanoFirmwareFlasher.Tests
         // -----------------------------------------------------------------------
 
         [TestMethod]
-        [ExpectedException(typeof(ArgumentNullException))]
         public void SignImage_NullInputPath_ThrowsArgumentNullException()
         {
-            CreateManager().SignImage(null, "output.bin", "1.0.0.0");
+            Assert.Throws<ArgumentNullException>(() => CreateManager().SignImage(null, "output.bin", "1.0.0.0"));
         }
 
         [TestMethod]
-        [ExpectedException(typeof(ArgumentNullException))]
         public void SignImage_NullOutputPath_ThrowsArgumentNullException()
         {
-            CreateManager().SignImage("input.bin", null, "1.0.0.0");
+            Assert.Throws<ArgumentNullException>(() => CreateManager().SignImage("input.bin", null, "1.0.0.0"));
         }
 
         [TestMethod]
-        [ExpectedException(typeof(ArgumentNullException))]
         public void SignImage_NullVersion_ThrowsArgumentNullException()
         {
-            CreateManager().SignImage("input.bin", "output.bin", null);
+            Assert.Throws<ArgumentNullException>(() => CreateManager().SignImage("input.bin", "output.bin", null));
         }
 
         [TestMethod]
@@ -108,10 +105,9 @@ namespace nanoFirmwareFlasher.Tests
         // -----------------------------------------------------------------------
 
         [TestMethod]
-        [ExpectedException(typeof(ArgumentNullException))]
         public void GenerateSigningKey_NullOutputPath_ThrowsArgumentNullException()
         {
-            CreateManager().GenerateSigningKey(null);
+            Assert.Throws<ArgumentNullException>(() => CreateManager().GenerateSigningKey(null));
         }
 
         [TestMethod]
@@ -128,17 +124,15 @@ namespace nanoFirmwareFlasher.Tests
         // -----------------------------------------------------------------------
 
         [TestMethod]
-        [ExpectedException(typeof(ArgumentNullException))]
         public void ExtractPublicKey_NullSigningKeyPath_ThrowsArgumentNullException()
         {
-            CreateManager().ExtractPublicKey(null, "root-pub-key.c");
+            Assert.Throws<ArgumentNullException>(() => CreateManager().ExtractPublicKey(null, "root-pub-key.c"));
         }
 
         [TestMethod]
-        [ExpectedException(typeof(ArgumentNullException))]
         public void ExtractPublicKey_NullOutputPath_ThrowsArgumentNullException()
         {
-            CreateManager().ExtractPublicKey("my-key.pem", null);
+            Assert.Throws<ArgumentNullException>(() => CreateManager().ExtractPublicKey("my-key.pem", null));
         }
 
         [TestMethod]
@@ -155,12 +149,11 @@ namespace nanoFirmwareFlasher.Tests
         // -----------------------------------------------------------------------
 
         [TestMethod]
-        [ExpectedException(typeof(ArgumentNullException))]
         public void Constructor_NullSigningKeyPath_ThrowsArgumentNullException()
         {
-            _ = new McubootImageManager(
+            Assert.Throws<ArgumentNullException>(() => new McubootImageManager(
                 signingKeyPath: null,
-                slotSize: 0x80000);
+                slotSize: 0x80000));
         }
 
         // -----------------------------------------------------------------------
@@ -195,7 +188,7 @@ namespace nanoFirmwareFlasher.Tests
                 slotSize: 0x80000,
                 imgtoolPath: null); // triggers auto-detect, which will return null
 
-            Assert.ThrowsException<McubootImageException>(
+            Assert.Throws<McubootImageException>(
                 () => manager.SignImage("in.bin", "out.bin", "1.0.0.0"),
                 "When imgtool is not found, SignImage must throw McubootImageException");
         }

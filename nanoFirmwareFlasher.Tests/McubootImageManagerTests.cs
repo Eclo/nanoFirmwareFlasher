@@ -272,10 +272,9 @@ namespace nanoFirmwareFlasher.Tests
         }
 
         [TestMethod]
-        [ExpectedException(typeof(ArgumentNullException))]
         public void ValidateImage_NullPath_ThrowsArgumentNullException()
         {
-            CreateManager().ValidateImage(null);
+            Assert.Throws<ArgumentNullException>(() => CreateManager().ValidateImage(null));
         }
 
         /// <summary>
