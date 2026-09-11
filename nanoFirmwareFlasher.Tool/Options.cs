@@ -526,9 +526,9 @@ namespace nanoFramework.Tools.FirmwareFlasher
         [Option(
             "erase-image",
             Required = false,
-            Default = false,
-            HelpText = "Erase the MCUboot secondary slot via SMP without uploading. Requires --serialport.")]
-        public bool EraseImage { get; set; }
+            Default = null,
+            HelpText = "Erase the MCUboot secondary slot of the given image via SMP without uploading: 0 = CLR, 1 = deployment. Requires --serialport.")]
+        public byte? EraseImage { get; set; }
 
         [Option(
             "secondary-slot",
